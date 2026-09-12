@@ -4,7 +4,7 @@
    which the page reads through window.claude's own db bridge rather than a
    fetch() this worker can see. Offline just means the app still OPENS and
    shows whatever was last loaded; live edits still need a connection. */
-const CACHE_NAME = "hmem-scouts-shell-v1";
+const CACHE_NAME = "SCOUT";
 const PRECACHE_URLS = [
   "manifest.json",
   "icon-192.png",
