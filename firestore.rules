@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Anyone who has opened the app gets a free, invisible "anonymous"
+    // sign-in (see SETUP.md) purely so this check has something to test --
+    // there is no login screen and no password. This is NOT strong access
+    // control: it mainly keeps the database from being wide open to every
+    // random visitor on the internet who wasn't even given the app's URL.
+    // Anyone with the app's link can still read and write everything.
+    // See the "About the security model" section in SETUP.md before
+    // putting sensitive information in here.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
