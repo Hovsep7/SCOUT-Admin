@@ -143,6 +143,16 @@ button{font-family:inherit}
   position:absolute; left:0; bottom:0; height:2px; background:var(--gold);
   transition:left .3s cubic-bezier(.16,.84,.44,1), width .3s cubic-bezier(.16,.84,.44,1);
 }
+
+     /* ---- scroll progress + branded scrollbar ---- */
+.scroll-progress{ position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(255,255,255,.08); overflow:hidden; }
+.scroll-progress span{ display:block; height:100%; width:0%; background:var(--gold); transition:width .08s linear; }
+
+html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-track{ background:transparent; }
+::-webkit-scrollbar-thumb{ background:var(--gold); border-radius:999px; border:2px solid var(--bg); background-clip:padding-box; }
+::-webkit-scrollbar-thumb:hover{ background:var(--st-prog); }
      
 @media (max-width:600px){
   .hdr-inner{ padding:10px 12px; gap:10px; }
@@ -4024,6 +4034,20 @@ function initHeaderScrollShadow(){
 initHeaderScrollShadow();
 initWordLookup();
 
+     function initScrollProgress(){
+  const fill = document.getElementById("scrollProgressFill");
+  if(!fill) return;
+  const update = ()=>{
+    const doc = document.documentElement;
+    const max = doc.scrollHeight - doc.clientHeight;
+    fill.style.width = (max > 0 ? (window.scrollY / max) * 100 : 0) + "%";
+  };
+  window.addEventListener("scroll", update, {passive:true});
+  window.addEventListener("resize", update, {passive:true});
+  update();
+}
+initScrollProgress();
+     
 /* Best-effort only: lets the app shell (this page's own HTML/CSS/JS) load
    instantly, and even offline, on a repeat visit -- it does nothing for the
    live roster/attendance data itself, which still needs a connection to
