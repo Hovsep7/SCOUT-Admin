@@ -61,6 +61,8 @@ h1,h2,h3{margin:0}
 button{font-family:inherit}
 .hidden{display:none!important}
 .wrap{max-width:1180px; margin:0 auto; padding:0 16px 56px}
+#app.view-fade{animation:view-fade-in .22s ease}
+@keyframes view-fade-in{ from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:translateY(0)} }
 .sched-side, .timeline-scroll, .dash-activity-list{scrollbar-width:thin}
 .sched-side::-webkit-scrollbar, .timeline-scroll::-webkit-scrollbar, .dash-activity-list::-webkit-scrollbar{width:8px}
 .sched-side::-webkit-scrollbar-thumb, .timeline-scroll::-webkit-scrollbar-thumb, .dash-activity-list::-webkit-scrollbar-thumb{
@@ -448,7 +450,7 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .source-chip.chip-dragging{opacity:.4}
 .timeline-wrap{flex:2 1 420px; min-width:280px; background:var(--panel); border-radius:12px; box-shadow:var(--shadow); overflow:hidden}
 .timeline-scroll{max-height:640px; overflow-y:auto; position:relative}
-.timeline{position:relative}
+.timeline{position:relative; touch-action:pan-y}
 .tl-drop-indicator{
   position:absolute; left:60px; right:8px; height:3px; border-radius:2px; background:var(--gold);
   opacity:0; pointer-events:none; transform:translateY(-1px); box-shadow:0 0 0 3px rgba(230,190,80,.25);
@@ -473,12 +475,12 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .tl-block{
   position:absolute; left:60px; right:8px; border-radius:9px; padding:5px 8px; overflow:hidden;
   cursor:grab; user-select:none; box-shadow:0 2px 6px rgba(0,0,0,.18);
-  border:1px solid rgba(255,255,255,.55);
+  border:1px solid rgba(255,255,255,.55); touch-action:none;
 }
 .tl-block.dragging{cursor:grabbing; opacity:.85; z-index:20}
 .tl-block .tb-title{font-size:.76rem; font-weight:700; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .tl-block .tb-time{font-size:.66rem; opacity:.85}
-.tl-resize{position:absolute; left:0; right:0; bottom:0; height:9px; cursor:ns-resize}
+.tl-resize{position:absolute; left:0; right:0; bottom:0; height:14px; cursor:ns-resize; touch-action:none}
 .tl-resize::after{content:""; position:absolute; left:50%; bottom:2px; width:24px; height:3px; border-radius:2px; background:var(--grip, rgba(255,255,255,.6)); transform:translateX(-50%)}
 
 /* ---- attendance ---- */
@@ -883,6 +885,7 @@ const STR = {
     lastEditedBy: "Վերջին փոփոխողը՝",
     tabDashboard: "Ակնարկ",
     dashCloseToLevelUp: "Մօտ են յաջորդ կարգին",
+    dashStreakLeaderboard: "Ներկայութեան Յաջողութիւններ",
     dashAttendanceGaps: "Ներկայութեան բացեր",
     dashNeverPresent: "Բնաւ ներկայ նշուած չէ",
     dashLastPresent: "Վերջին ներկայութիւնը՝",
@@ -993,6 +996,7 @@ const STR = {
     activityPointsAwarded: "{team}. {delta} միավոր — {reason}",
     activityPointEntryDeleted: "{team}ի միավորի գրառում մը ջնջուեցաւ",
     printSessionPlan: "Տպել Հանդիպումին Ծրագիրը",
+    jumpToNow: "📍 Հիմա",
     attachments: "Կցորդներ",
     addAttachment: "Աւելցնել Կցորդ",
     attachmentUrl: "Կապ (URL)",
@@ -1077,6 +1081,7 @@ const STR = {
     lastEditedBy: "Last edited by:",
     tabDashboard: "Dashboard",
     dashCloseToLevelUp: "Close to leveling up",
+    dashStreakLeaderboard: "Attendance Streaks",
     dashAttendanceGaps: "Attendance gaps",
     dashNeverPresent: "Never marked present",
     dashLastPresent: "Last present:",
@@ -1187,6 +1192,7 @@ const STR = {
     activityPointsAwarded: "{team}: {delta} points — {reason}",
     activityPointEntryDeleted: "A point entry for {team} was deleted",
     printSessionPlan: "Print Session Plan",
+    jumpToNow: "📍 Now",
     attachments: "Attachments",
     addAttachment: "Add Attachment",
     attachmentUrl: "Link (URL)",
@@ -1234,6 +1240,7 @@ let patrols = {}, patrolPoints = {};
 let reqChecks = {}, activityLog = {};
 
 let view = "roster";
+let lastFadedView = null;
 let activeScoutId = null;
 let overlayOpenedForScout = null; // which scout's entrance animation has already played, so
                                    // re-renders while the panel stays open (every status click,
@@ -1262,6 +1269,8 @@ let pendingCelebration = null;
 
 const DAY_START = 8*60, DAY_END = 22*60, PX_PER_MIN = 1.4;
 let drag = null; // {mode, blockId, startClientY, originStart, originDuration, elTop, elHeight}
+let pendingTouchTapStart = null;
+let autoScrolledScheduleKey = null;
 
 function t(key){ return (STR[LANG] && STR[LANG][key]) || STR.hy[key] || key; }
 function esc(s){
@@ -1796,10 +1805,40 @@ function confirmAction(message, onYes){
 function prefersReducedMotion(){
   try{ return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }catch(e){ return false; }
 }
+let sharedAudioCtx = null;
+function playCelebrationChime(){
+  try{
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) return;
+    if(!sharedAudioCtx) sharedAudioCtx = new Ctx();
+    const ctx = sharedAudioCtx;
+    if(ctx.state === "suspended") ctx.resume().catch(()=>{});
+    const notes = [523.25, 659.25, 783.99]; /* a bright little C-E-G arpeggio */
+    const now = ctx.currentTime;
+    notes.forEach((freq, i)=>{
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = now + i*0.09;
+      const end = start + 0.3;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.18, start+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, end);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(start); osc.stop(end+0.02);
+    });
+  }catch(e){ /* sound is a nice-to-have, never worth breaking the celebration over */ }
+}
+function triggerHapticBuzz(){
+  try{ if(navigator.vibrate) navigator.vibrate([30,40,30,40,90]); }catch(e){}
+}
 function triggerCelebration(scoutId, rankId){
   const s = scouts[scoutId], r = ranks[rankId];
   if(!s || !r) return;
   if(!prefersReducedMotion()) showConfetti();
+  playCelebrationChime();
+  triggerHapticBuzz();
   const toast = document.createElement("div");
   toast.className = "celebration-toast";
   toast.textContent = t("celebrationMsg").replace("{name}", scoutDisplayName(s)).replace("{rank}", loc(r,"name"));
@@ -2305,6 +2344,17 @@ function render(){
   else if(view==="dashboard") body += renderDashboard();
   body += '<div class="footer-note">' + esc(t("scoutsCount")) + ": " + sortedScouts().length + " · " + esc(t("topics")) + ": " + Object.keys(topics).length + "</div>";
   app.innerHTML = body;
+  if(view !== lastFadedView){
+    /* Only fade in on an actual tab switch, not on every data-driven
+       re-render of the tab you're already looking at -- re-adding the same
+       animation class needs a forced reflow in between (the offsetWidth
+       read) or the browser just no-ops the second time since, as far as
+       it's concerned, the class never left. */
+    app.classList.remove("view-fade");
+    void app.offsetWidth;
+    app.classList.add("view-fade");
+    lastFadedView = view;
+  }
   if(activeScoutId && scouts[activeScoutId]){
     renderDetailOverlay(overlayOpenedForScout !== activeScoutId);
     overlayOpenedForScout = activeScoutId;
@@ -2851,6 +2901,7 @@ function renderSchedule(){
     </label>
     ${sessionNavHtml(scheduleDate, "stepScheduleDate", "scheduleDateJump")}
     <button class="btn primary" data-action="addSchedule">${esc(t('addSchedule'))}</button>
+    ${activeScheduleId && scheduleDate===todayStr() ? `<button class="btn small" data-action="jumpToNow">${esc(t('jumpToNow'))}</button>` : ""}
     ${activeScheduleId ? `<button class="btn small" data-action="printSessionPlan" data-id="${activeScheduleId}">🖨 ${esc(t('printSessionPlan'))}</button>` : ""}
     ${activeScheduleId ? `<button class="btn danger small" data-action="deleteSchedule" data-id="${activeScheduleId}">${esc(t('delete'))}</button>` : ""}
   </div>
@@ -2976,7 +3027,30 @@ function updateNowLine(){
   line.style.top = ((nowMin-DAY_START)*PX_PER_MIN) + "px";
 }
 setInterval(updateNowLine, 30000);
-function positionTimelineBlocks(){ updateNowLine(); }
+/* Scrolls the timeline so "now" is comfortably in view, the way opening
+   Google Calendar's day view drops you near the current time instead of at
+   the top of the day. Runs once per (date, schedule) pair -- guarded by
+   autoScrolledScheduleKey -- so it doesn't keep yanking the view back to
+   "now" every time something re-renders while you're scrolled elsewhere on
+   purpose (editing an evening block, say). */
+function scrollTimelineToNow(force, smooth){
+  const tl = document.querySelector(".timeline-scroll");
+  const line = document.getElementById("tlNowLine");
+  if(!tl || !line) return;
+  if(line.style.display === "none" && !force) return;
+  const top = parseFloat(line.style.top || "0");
+  const target = Math.max(0, top - tl.clientHeight/3);
+  if(smooth && !prefersReducedMotion()) tl.scrollTo({top: target, behavior: "smooth"});
+  else tl.scrollTop = target;
+}
+function maybeAutoScrollToNow(){
+  if(scheduleDate !== todayStr()) return;
+  const key = scheduleDate + "|" + activeScheduleId;
+  if(autoScrolledScheduleKey === key) return;
+  autoScrolledScheduleKey = key;
+  scrollTimelineToNow(false, false);
+}
+function positionTimelineBlocks(){ updateNowLine(); maybeAutoScrollToNow(); }
 
 /* =========================== RENDER: ATTENDANCE =========================== */
 function attendanceStatsForDate(dateStr, list){
@@ -3197,6 +3271,11 @@ function renderDashboard(){
   const completion = topicsByCompletion();
   const mostCompleted = completion.slice(0, 5);
   const leastCompleted = completion.slice(-5).reverse();
+  const topStreaks = list
+    .map(s=> ({s, streak: attendanceStreak(s.id)}))
+    .filter(x=> x.streak > 0)
+    .sort((a,b)=> b.streak - a.streak)
+    .slice(0, 5);
 
   const statsHtml = `
   <div class="dash-stats">
@@ -3248,6 +3327,13 @@ function renderDashboard(){
     </div>`;
   const mostCompletedHtml = mostCompleted.length ? mostCompleted.map(topicRowHtml).join("") : `<div class="dash-empty">${esc(t('dashNoData'))}</div>`;
   const leastCompletedHtml = leastCompleted.length ? leastCompleted.map(topicRowHtml).join("") : `<div class="dash-empty">${esc(t('dashNoData'))}</div>`;
+  const streakMedals = ["🥇","🥈","🥉"];
+  const topStreaksHtml = topStreaks.length ? topStreaks.map(({s,streak},i)=>`
+    <div class="dash-row" data-action="openScout" data-id="${s.id}">
+      <span class="lb-rank">${streakMedals[i]||(i+1)}</span>
+      <span class="dash-row-name">${esc(scoutDisplayName(s))}</span>
+      <span class="dash-row-pct">🔥 ${streak}</span>
+    </div>`).join("") : `<div class="dash-empty">${esc(t('dashNoData'))}</div>`;
 
   return `
   ${statsHtml}
@@ -3255,6 +3341,10 @@ function renderDashboard(){
     <div class="dash-panel">
       <h3>${esc(t('dashCloseToLevelUp'))}</h3>
       ${levelUpHtml}
+    </div>
+    <div class="dash-panel">
+      <h3>${esc(t('dashStreakLeaderboard'))}</h3>
+      ${topStreaksHtml}
     </div>
     <div class="dash-panel">
       <h3>${esc(t('dashConsecutiveAbsences'))}</h3>
@@ -3647,6 +3737,7 @@ function onAction(e){
   }
   else if(action==="printScoutReport"){ printScoutReport(el.dataset.id); }
   else if(action==="printSessionPlan"){ printSessionPlan(el.dataset.id); }
+  else if(action==="jumpToNow"){ scrollTimelineToNow(true, true); }
   else if(action==="heatmapPrevMonth"){
     const [y,m] = attendanceHeatmapMonth.split("-").map(Number);
     const d = new Date(y, m-2, 1);
@@ -3815,6 +3906,16 @@ function addCustomBlockAt(startMin, durationMin){
   logActivity(t("activityBlockAdded").replace("{title}", title));
   return id;
 }
+/* Touch's equivalent of the desktop drag-to-create gesture: instead of
+   dragging out a duration by hand (unusable on a touchscreen -- see the
+   pointerdown handler in bindTimelineDrag), a tap creates a real 30-minute
+   block right away at that time and opens it for editing, so duration/title/
+   color are all set through the modal's normal fields instead of a gesture. */
+function openAddBlockModalAt(startMin){
+  if(!activeScheduleId) return;
+  const id = addCustomBlockAt(startMin, 30);
+  if(id){ render(); openBlockModal(id); }
+}
 
 function openBlockModal(existingId){
   const root = document.getElementById("modalRoot");
@@ -3909,12 +4010,31 @@ function bindTimelineDrag(){
   timeline.addEventListener("pointerdown", (e)=>{
     if(drag) return;
     if(e.target.closest(".tl-block")) return;
-    e.preventDefault();
     const rect = timeline.getBoundingClientRect();
     const rawStart = DAY_START + ((e.clientY - rect.top) / PX_PER_MIN);
     const createStart = Math.max(DAY_START, Math.min(DAY_END-5, Math.round(rawStart/5)*5));
+    /* Touch is deliberately NOT hijacked into a drag here: on a touchscreen
+       this is also the only way to scroll the timeline, so treating a touch
+       drag as "create a block" would trap anyone below the visible fold with
+       no way to scroll down to the rest of the day. Instead a plain tap
+       (below) opens the add-block modal pre-filled with the tapped time --
+       the same pattern Google Calendar's mobile web view uses. Mouse/pen
+       input has no such conflict (wheel/trackpad scrolling is separate from
+       a click-drag), so desktop keeps the original drag-to-set-duration. */
+    if(e.pointerType === "touch"){
+      pendingTouchTapStart = createStart;
+      return;
+    }
+    e.preventDefault();
     drag = { mode:"create", startY: e.clientY, createStart, moved:false };
     timeline.setPointerCapture(e.pointerId);
+  });
+  timeline.addEventListener("click", (e)=>{
+    if(e.target.closest(".tl-block")) return;
+    if(pendingTouchTapStart == null) return;
+    const start = pendingTouchTapStart;
+    pendingTouchTapStart = null;
+    openAddBlockModalAt(start);
   });
   /* Drag a source chip from the sidebar straight onto the timeline to drop it
      at that time, instead of it always landing after the last existing block. */
