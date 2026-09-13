@@ -203,6 +203,12 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .status-dot.st-weak{background:var(--st-weak)}
 .status-dot.st-in_progress{background:var(--st-prog); color:var(--gold-ink)}
 .status-dot.st-mastered{background:var(--st-done)}
+.status-dot.pulse{animation:dot-pop .35s cubic-bezier(.34,1.56,.64,1)}
+@keyframes dot-pop{
+  0%{transform:scale(1)}
+  45%{transform:scale(1.35); box-shadow:0 0 0 6px rgba(255,255,255,.15)}
+  100%{transform:scale(1); box-shadow:0 0 0 0 rgba(255,255,255,0)}
+}
 
 /* ---- segmented progress bar (no border) ---- */
 .seg-bar{height:9px; border-radius:999px; overflow:hidden; display:flex; background:var(--panel-3)}
@@ -225,11 +231,17 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .scout-card .row1{display:flex; justify-content:space-between; align-items:flex-start; gap:8px}
 .row1-id{display:flex; align-items:center; gap:10px; min-width:0}
 /* ---- avatar completion ring (conic-gradient around initials, no photo needed) ---- */
+@property --pct{
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
 .avatar-ring{
   --pct:0; --ring-color:var(--navy);
   position:relative; width:40px; height:40px; border-radius:50%; flex:none;
   display:flex; align-items:center; justify-content:center;
   background:conic-gradient(var(--ring-color) calc(var(--pct)*1%), var(--panel-3) 0);
+  transition:--pct .7s cubic-bezier(.16,.84,.44,1);
 }
 .avatar-ring::before{
   content:""; position:absolute; inset:3px; border-radius:50%; background:var(--panel);
@@ -342,16 +354,21 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .topic-photo-thumb{width:44px; height:44px; object-fit:cover; border-radius:8px; cursor:pointer; box-shadow:var(--shadow); flex:none}
 .topic-edited-by{font-size:.7rem; opacity:.75; font-style:italic}
 
-/* ---- curriculum tab (compact accordion) ---- */
-.curr-item-row{
-  display:flex; gap:10px; align-items:center; padding:8px 4px; border-top:1px solid var(--line);
+/* ---- curriculum tab (card grid) ---- */
+.curr-cards-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; margin-top:2px}
+.curr-card{
+  display:flex; flex-direction:column; gap:6px; background:var(--panel-2); border-radius:12px;
+  padding:12px; border:1px solid transparent; transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
 }
-.curr-item-row:first-child{border-top:none}
-.curr-item-row .ci-main{flex:1; min-width:0; cursor:pointer}
-.curr-item-row .ci-title{font-size:.86rem; font-weight:600}
-.curr-item-row .ci-sub{font-size:.72rem; color:var(--ink-dim); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.curr-item-actions{display:flex; gap:4px; flex:none}
-.curr-editor{background:var(--panel-2); border-radius:10px; padding:12px; margin:6px 0 10px}
+.curr-card:hover{transform:translateY(-2px); box-shadow:var(--shadow); border-color:var(--line)}
+.curr-card .ci-main{flex:1; min-width:0; cursor:pointer}
+.curr-card .ci-title{font-size:.87rem; font-weight:700}
+.curr-card .ci-sub{
+  font-size:.74rem; color:var(--ink-dim); margin-top:2px; display:-webkit-box;
+  -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
+.curr-item-actions{display:flex; gap:4px; flex:none; margin-top:auto; padding-top:6px}
+.curr-editor{background:var(--panel-2); border-radius:10px; padding:12px; margin:6px 0 10px; grid-column:1/-1}
 .curr-editor-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px}
 .curr-editor-grid .full{grid-column:1/-1}
 .curr-editor label{font-size:.7rem; color:var(--ink-dim); display:block; margin-bottom:2px}
@@ -443,6 +460,12 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
   border:2px dashed var(--gold); pointer-events:none; z-index:15;
   display:flex; align-items:flex-start; justify-content:center;
   padding-top:4px; font-size:.72rem; font-weight:700; color:var(--gold-ink);
+}
+.tl-now-line{
+  position:absolute; left:0; right:0; height:2px; background:var(--st-weak); z-index:16; pointer-events:none;
+}
+.tl-now-line::before{
+  content:""; position:absolute; left:2px; top:-4px; width:9px; height:9px; border-radius:50%; background:var(--st-weak);
 }
 .tl-hour-row{position:absolute; left:0; right:0; border-top:1px solid var(--line)}
 .tl-hour-label{position:absolute; left:6px; top:-9px; font-size:.68rem; color:var(--ink-dim); background:var(--panel); padding:0 4px}
@@ -559,6 +582,24 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .plog-delta.neg{color:var(--st-weak)}
 .plog-reason{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .plog-meta{color:var(--ink-dim); font-size:.68rem; white-space:nowrap; flex:none}
+
+/* ---- passphrase gate ---- */
+.gate-overlay{
+  position:fixed; inset:0; z-index:500; background:var(--navy);
+  display:flex; align-items:center; justify-content:center; padding:16px;
+}
+.gate-card{
+  background:var(--panel); border-radius:16px; padding:28px 24px; max-width:320px; width:100%;
+  box-shadow:0 12px 40px rgba(0,0,0,.35); text-align:center;
+}
+.gate-title{font-size:1.2rem; font-weight:800; margin-bottom:6px}
+.gate-subtitle{font-size:.82rem; color:var(--ink-dim); margin-bottom:16px}
+.gate-input{
+  width:100%; border:none; background:var(--panel-2); color:var(--ink); border-radius:9px;
+  padding:11px 13px; font-size:.95rem; font-family:inherit; text-align:center; margin-bottom:10px;
+}
+.gate-error{color:var(--st-weak); font-size:.78rem; margin-bottom:10px}
+.gate-btn{width:100%}
 
 /* ---- modal ---- */
 .modal-backdrop{
@@ -682,6 +723,16 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 </head>
 <body>
 
+<div class="gate-overlay hidden" id="gateOverlay">
+  <form class="gate-card" id="gateForm" autocomplete="off">
+    <div class="gate-title" id="gateTitleText"></div>
+    <div class="gate-subtitle" id="gateSubtitleText"></div>
+    <input type="password" id="gatePassInput" class="gate-input" autocomplete="off" autocapitalize="off" spellcheck="false" />
+    <div class="gate-error hidden" id="gateError"></div>
+    <button type="submit" class="btn primary gate-btn" id="gateBtn"></button>
+  </form>
+</div>
+
 <div class="hdr">
   <div class="hdr-inner" id="hdrInner"></div>
   <div class="hdr-tabs" id="hdrTabs"></div>
@@ -760,6 +811,11 @@ const STR = {
   hy: {
     title: "Հ.Մ.Ը.Մ. Երուսաղէմ",
     subtitle: "Սկաուտութեան Կառավարման Կայք",
+    gateTitle: "🔒 Փակուած է",
+    gateSubtitle: "Մուտքագրէ գաղտնաբառը շարունակելու համար",
+    gatePlaceholder: "Գաղտնաբառ…",
+    gateButton: "Մուտք",
+    gateError: "Սխալ գաղտնաբառ։ Փորձէ դարձեալ։",
     tabRoster: "Սկաուտներ",
     tabCurriculum: "Ծրագիր",
     tabSchedule: "Օրակարգ",
@@ -772,6 +828,7 @@ const STR = {
     addScout: "+ Աւելցնել Սկաուտ",
     noScouts: "Դեռ ոչ մէկ սկաուտ աւելցուած չէ։",
     noScoutsMatch: "Ոչ մէկ սկաուտ կը համապատասխանէ որոնումին։",
+    noCurriculumMatch: "Ոչ մէկ նիւթ կը համապատասխանէ որոնումին։",
     role: "Աստիճան",
     noRole: "Առանց աստիճանի",
     delete: "Ջնջել",
@@ -807,6 +864,7 @@ const STR = {
     deleteBlockConfirm: "Ջնջել այս բլոքը։",
     noBlocks: "Բլոք չկայ։ Աւելցուցէք ստորեւ գտնուող կոճակով կամ ընտրէք նիւթ մը ձախին։",
     present: "Ներկայ", absent: "Բացակայ", exempt: "Ազատուած", unmarked: "Չնշուած",
+    markAllAbsent: "Նշել Բոլորը Բացակայ",
     minutes: "վրկ.",
     pickSource: "Ընտրել աղբիւր",
     rankLabel: "Կարգ",
@@ -815,6 +873,7 @@ const STR = {
     selectItem: "Ընտրել նիւթ",
     openNewTab: "Բանալ Առանձին Պատուհանով",
     schedSearchPlaceholder: "Փնտռել նիւթ…",
+    curriculumSearchPlaceholder: "Փնտռել նիւթ կամ բաժին…",
     confirmYes: "Ջնջել",
     confirmNo: "Չեղարկել",
     prevSession: "Նախորդ Հանդիպումը",
@@ -838,6 +897,7 @@ const STR = {
     dashNoData: "Տուեալ չկայ դեռ",
     markAllPresent: "Նշել Բոլորը Ներկայ",
     markAllPresentConfirm: "Փոխարինե՞լ բոլորին նշումը «Ներկայ»ով այս թուականին։ Ասիկա կը վերագրէ գոյութիւն ունեցող նշումները։",
+    markAllAbsentConfirm: "Փոխարինե՞լ բոլորին նշումը «Բացակայ»ով այս թուականին։ Ասիկա կը վերագրէ գոյութիւն ունեցող նշումները։",
     clearAllAttendance: "Մաքրել Բոլորը",
     clearAllAttendanceConfirm: "Ջնջե՞լ բոլոր ներկայութեան նշումները այս թուականին։",
     celebrationMsg: "🎉 {name} աւարտեց {rank} կարգը! 🎉",
@@ -945,6 +1005,11 @@ const STR = {
   en: {
     title: "Homenetmen Jerusalem",
     subtitle: "Scouting Admin",
+    gateTitle: "🔒 Locked",
+    gateSubtitle: "Enter the passphrase to continue",
+    gatePlaceholder: "Passphrase…",
+    gateButton: "Enter",
+    gateError: "Wrong passphrase. Try again.",
     tabRoster: "Scouts",
     tabCurriculum: "Curriculum",
     tabSchedule: "Schedule",
@@ -957,6 +1022,7 @@ const STR = {
     addScout: "+ Add Scout",
     noScouts: "No scouts have been added yet.",
     noScoutsMatch: "No scouts match your search.",
+    noCurriculumMatch: "No topics match your search.",
     role: "Asdijan",
     noRole: "No asdijan set",
     delete: "Delete",
@@ -992,6 +1058,7 @@ const STR = {
     deleteBlockConfirm: "Delete this block.",
     noBlocks: "No blocks yet. Add one below or pick a topic on the left.",
     present: "Present", absent: "Absent", exempt: "Exempt", unmarked: "Unmarked",
+    markAllAbsent: "Mark All Absent",
     minutes: "min",
     pickSource: "Pick a source",
     rankLabel: "Rank",
@@ -1000,6 +1067,7 @@ const STR = {
     selectItem: "Select item",
     openNewTab: "Open in New Tab",
     schedSearchPlaceholder: "Search for a topic…",
+    curriculumSearchPlaceholder: "Search topics or categories…",
     confirmYes: "Delete",
     confirmNo: "Cancel",
     prevSession: "Previous Session",
@@ -1023,6 +1091,7 @@ const STR = {
     dashNoData: "No data yet",
     markAllPresent: "Mark All Present",
     markAllPresentConfirm: "Set everyone to Present for this date? This overwrites any existing marks.",
+    markAllAbsentConfirm: "Set everyone to Absent for this date? This overwrites any existing marks.",
     clearAllAttendance: "Clear All",
     clearAllAttendanceConfirm: "Clear all attendance marks for this date?",
     celebrationMsg: "🎉 {name} completed the {rank} rank! 🎉",
@@ -1173,6 +1242,8 @@ let openRankSections = new Set(["r1"]);
 let openTopicDetails = new Set();
 let openCurrRanks = new Set([]);
 let openCurrCats = new Set([]);
+let curriculumQuery = "";
+let justChangedKey = null;
 let editingTopicId = null;
 let editingCatItemId = null;
 let filters = { rankId: "all", query: "", sort: "name" };
@@ -1224,9 +1295,24 @@ function scoutInitials(s){
    (this app has none): the ring fill is the scout's % progress on their
    current rank, colored to match that rank. */
 function avatarRingHtml(initials, pct, color, extraClass){
-  return `<div class="avatar-ring ${extraClass||""}" style="--pct:${Math.max(0,Math.min(100,pct||0))}; --ring-color:${esc(color||"var(--navy)")}" title="${pct||0}%">
+  const p = Math.max(0,Math.min(100,pct||0));
+  /* --pct starts at 0 here on purpose: the ring animates up to its real value
+     via animateAvatarRings(), which runs right after this markup lands in the
+     DOM. Baking the final value straight into this inline style would give
+     the browser nothing to transition from (a freshly-inserted node has no
+     "before" state), so it would just snap instead of filling in. */
+  return `<div class="avatar-ring ${extraClass||""}" data-pct="${p}" style="--pct:0; --ring-color:${esc(color||"var(--navy)")}" title="${p}%">
     <span class="avatar-initials">${esc(initials)}</span>
   </div>`;
+}
+function animateAvatarRings(){
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      document.querySelectorAll(".avatar-ring[data-pct]").forEach(el=>{
+        el.style.setProperty("--pct", el.dataset.pct);
+      });
+    });
+  });
 }
 
 /* =========================== WORD LOOKUP =========================== */
@@ -2229,6 +2315,7 @@ function render(){
   bindEvents();
   if(view==="schedule") positionTimelineBlocks();
   restoreScrollState(scrollState);
+  animateAvatarRings();
   if(pendingCelebration){ const c = pendingCelebration; pendingCelebration = null; triggerCelebration(c.scoutId, c.rankId); }
 }
 
@@ -2460,7 +2547,7 @@ function renderDetailOverlay(isNewlyOpened){
       const editedHtml = (prog && prog.updatedBy) ? `<div class="topic-edited-by">${esc(t('lastEditedBy'))} ${esc(prog.updatedBy)}${prog.updatedAt ? " · "+esc(formatDateTime(prog.updatedAt)) : ""}</div>` : "";
       return `
       <div class="topic-row">
-        <button class="status-dot st-${st}" data-action="cycleStatus" data-scout="${s.id}" data-topic="${tp.id}" title="${esc(t(STATUS_META[st].labelKey))}">${STATUS_META[st].glyph}</button>
+        <button class="status-dot st-${st} ${justChangedKey===(s.id+"__"+tp.id)?"pulse":""}" data-action="cycleStatus" data-scout="${s.id}" data-topic="${tp.id}" title="${esc(t(STATUS_META[st].labelKey))}">${STATUS_META[st].glyph}</button>
         <div class="topic-main">
           <div class="topic-title-row" data-action="toggleTopicDetail" data-scout="${s.id}" data-topic="${tp.id}">
             <span class="topic-title">${esc(loc(tp,"title"))}</span>
@@ -2569,10 +2656,19 @@ function renderCurriculum(){
   const legend = `<div class="legend">
     ${STATUS_ORDER.map(k=>`<span><i style="background:var(${k==='not_started'?'--st-none':k==='weak'?'--st-weak':k==='in_progress'?'--st-prog':'--st-done'})"></i> ${esc(t(STATUS_META[k].labelKey))}</span>`).join("")}
   </div>`;
+  const searchBar = `<input type="text" id="curriculumSearchInput" class="sched-search-input" placeholder="${esc(t('curriculumSearchPlaceholder'))}" value="${esc(curriculumQuery)}" />`;
+
+  const q = curriculumQuery.trim().toLowerCase();
+  const searching = q.length > 0;
+  function matches(item){
+    return loc(item,"title").toLowerCase().includes(q) ||
+      (loc(item,"summary")||loc(item,"desc")||"").toLowerCase().includes(q);
+  }
 
   const rankBlocks = rlist.map(r=>{
-    const isOpen = openCurrRanks.has(r.id);
-    const tlist = topicsForRank(r.id);
+    const tlist = searching ? topicsForRank(r.id).filter(matches) : topicsForRank(r.id);
+    if(searching && !tlist.length) return "";
+    const isOpen = searching || openCurrRanks.has(r.id);
     const req = LANG==="en" ? (r.reqEn||{}) : (r.reqHy||{});
     const reqFields = ["age","experience","condition","leadership"].map(k=>`
       <div class="req-field">
@@ -2589,15 +2685,16 @@ function renderCurriculum(){
       <div class="rank-section-body">
         ${r.bookUrl ? `<a class="book-link" href="javascript:void(0)" data-action="openBook" data-url="${esc(r.bookUrl)}">📘 ${esc(t('openBook'))}</a>` : ""}
         <div class="req-grid">${reqFields}</div>
-        ${rows}
+        <div class="curr-cards-grid">${rows}</div>
         <div style="margin-top:8px"><button class="btn small gold" data-action="addTopic" data-rank="${r.id}">${esc(t('addTopic'))}</button></div>
       </div>
     </div>`;
   }).join("");
 
   const catBlocks = sortedCategories().map(c=>{
-    const isOpen = openCurrCats.has(c.id);
-    const items = itemsForCategory(c.id);
+    const items = searching ? itemsForCategory(c.id).filter(matches) : itemsForCategory(c.id);
+    if(searching && !items.length) return "";
+    const isOpen = searching || openCurrCats.has(c.id);
     const rows = items.map(it=> curriculumItemRow(it, "catitem")).join("") || `<div style="color:var(--ink-dim); font-size:.8rem; padding:6px 0">—</div>`;
     return `
     <div class="rank-section ${isOpen?"open":""}">
@@ -2608,7 +2705,7 @@ function renderCurriculum(){
       <div class="rank-section-body">
         <input type="text" data-catname="hy" data-cat="${c.id}" value="${esc(c.nameHy||"")}" placeholder="${esc(t('categoryName'))} (ՀԱՅ)" style="margin-bottom:6px; width:100%; border:none; background:var(--panel-2); border-radius:8px; padding:6px 9px; font-size:.82rem; color:var(--ink)" />
         <input type="text" data-catname="en" data-cat="${c.id}" value="${esc(c.nameEn||"")}" placeholder="${esc(t('categoryName'))} (EN)" style="margin-bottom:8px; width:100%; border:none; background:var(--panel-2); border-radius:8px; padding:6px 9px; font-size:.82rem; color:var(--ink)" />
-        ${rows}
+        <div class="curr-cards-grid">${rows}</div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px">
           <button class="btn small gold" data-action="addCatItem" data-cat="${c.id}">${esc(t('addItem'))}</button>
           <button class="btn small danger" data-action="deleteCategory" data-id="${c.id}">${esc(t('delete'))}</button>
@@ -2617,7 +2714,8 @@ function renderCurriculum(){
     </div>`;
   }).join("");
 
-  return legend + rankBlocks +
+  return legend + searchBar + rankBlocks +
+    (searching && !rankBlocks && !catBlocks ? `<div class="empty-state">${esc(t('noCurriculumMatch'))}</div>` : "") +
     `<h2 style="font-size:1rem; margin:20px 0 10px">${esc(t('otherCategories'))}</h2>` +
     catBlocks +
     `<button class="btn primary" data-action="addCategory">${esc(t('addCategory'))}</button>`;
@@ -2691,7 +2789,7 @@ function curriculumItemRow(item, kind){
   const sub = kind==="topic" ? ("p."+(item.page??"")) : "";
   if(!editing){
     return `
-    <div class="curr-item-row">
+    <div class="curr-card">
       <div class="ci-main" data-action="${kind==='topic'?'editTopic':'editCatItem'}" data-id="${item.id}">
         <div class="ci-title">${esc(loc(item,titleField))||"—"}</div>
         <div class="ci-sub">${esc(loc(item,"summary")||loc(item,"desc")||"")} ${sub?(" · "+sub):""}</div>
@@ -2845,6 +2943,7 @@ function renderSchedule(){
         <div class="timeline" id="timelineEl" style="height:${totalHeight}px">
           ${hourRows.join("")}
           ${blockEls}
+          ${nowLineHtml(scheduleDate)}
         </div>
       </div>
     </div>
@@ -2862,7 +2961,22 @@ function contrastTextColor(hex){
   const yiq = (r*299 + g*587 + b*114) / 1000;
   return yiq >= 150 ? "var(--ink)" : "#fff";
 }
-function positionTimelineBlocks(){ /* layout is done via inline styles already; reserved for future use */ }
+function nowLineHtml(dateStr){
+  if(dateStr !== todayStr()) return "";
+  return `<div class="tl-now-line" id="tlNowLine"></div>`;
+}
+function updateNowLine(){
+  const line = document.getElementById("tlNowLine");
+  if(!line) return;
+  if(scheduleDate !== todayStr()){ line.style.display = "none"; return; }
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  if(nowMin < DAY_START || nowMin > DAY_END){ line.style.display = "none"; return; }
+  line.style.display = "block";
+  line.style.top = ((nowMin-DAY_START)*PX_PER_MIN) + "px";
+}
+setInterval(updateNowLine, 30000);
+function positionTimelineBlocks(){ updateNowLine(); }
 
 /* =========================== RENDER: ATTENDANCE =========================== */
 function attendanceStatsForDate(dateStr, list){
@@ -2928,6 +3042,7 @@ function renderAttendance(){
     </label>
     ${sessionNavHtml(attendanceDate, "stepAttendanceDate", "attendanceDateJump")}
     <button class="btn small" data-action="markAllPresent">${esc(t('markAllPresent'))}</button>
+    <button class="btn small" data-action="markAllAbsent">${esc(t('markAllAbsent'))}</button>
     <button class="btn small danger" data-action="clearAllAttendance">${esc(t('clearAllAttendance'))}</button>
   </div>
   <div class="att-summary">
@@ -3207,6 +3322,14 @@ function bindEvents(){
       if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
     }, 180));
   }
+  const curriculumSearchInput = document.getElementById("curriculumSearchInput");
+  if(curriculumSearchInput){
+    curriculumSearchInput.addEventListener("input", debounce((e)=>{
+      curriculumQuery = e.target.value; render();
+      const el = document.getElementById("curriculumSearchInput");
+      if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }, 180));
+  }
   const schedDateInput = document.getElementById("scheduleDateInput");
   if(schedDateInput) schedDateInput.addEventListener("change", (e)=>{ scheduleDate = e.target.value; activeScheduleId = null; render(); });
   const sessionNotesInput = document.getElementById("sessionNotesInput");
@@ -3365,7 +3488,14 @@ function onAction(e){
         }
       }
     }
+    /* Set the pulse flag BEFORE writing: a local/mock backend's onSnapshot
+       can fire synchronously inside setStatus() (before this call even
+       returns), so the flag has to already be in place for that render to
+       pick it up -- setting it after would always miss the first paint. */
+    const pulseKey = scoutId+"__"+topicId;
+    justChangedKey = pulseKey;
     setStatus(scoutId, topicId, newStatus);
+    setTimeout(()=>{ if(justChangedKey===pulseKey){ justChangedKey = null; render(); } }, 380);
   }
   else if(action==="toggleReqCheck"){
     const scoutId = el.dataset.scout, rankId = el.dataset.rank, reqKey = el.dataset.req;
@@ -3500,6 +3630,15 @@ function onAction(e){
     };
     const hasExisting = sortedScouts().some(s=> attendance[attendanceDate+"__"+s.id]);
     if(hasExisting){ confirmAction(t("markAllPresentConfirm"), doIt); } else { doIt(); }
+  }
+  else if(action==="markAllAbsent"){
+    const doIt = ()=>{
+      sortedScouts().forEach(s=>{
+        upsertDoc("attendance", attendanceDate+"__"+s.id, {date: attendanceDate, scoutId: s.id, status: "absent", updatedBy: EDITOR_NAME||null, updatedAt: new Date().toISOString()});
+      });
+    };
+    const hasExisting = sortedScouts().some(s=> attendance[attendanceDate+"__"+s.id]);
+    if(hasExisting){ confirmAction(t("markAllAbsentConfirm"), doIt); } else { doIt(); }
   }
   else if(action==="clearAllAttendance"){
     confirmAction(t("clearAllAttendanceConfirm"), ()=>{
@@ -4178,7 +4317,44 @@ function initServiceWorker(){
 }
 initServiceWorker();
 
-init();
+/* Lightweight, client-side-only gate: not real security (Firestore rules
+   remain the actual access control -- see firestore.rules/SETUP.md), just a
+   speed bump so a casually-shared link doesn't land a stranger straight in
+   the roster. Passphrase lives in this file; anyone editing the source can
+   read or change it. */
+const GATE_PASSPHRASE = "Daniel";
+function gatePassed(){
+  try{ return localStorage.getItem("scout_gate_ok") === "1"; }catch(e){ return false; }
+}
+function setGatePassed(){
+  try{ localStorage.setItem("scout_gate_ok", "1"); }catch(e){}
+}
+function showGate(){
+  const gate = document.getElementById("gateOverlay");
+  if(!gate) { init(); return; }
+  document.getElementById("gateTitleText").textContent = t("gateTitle");
+  document.getElementById("gateSubtitleText").textContent = t("gateSubtitle");
+  document.getElementById("gatePassInput").placeholder = t("gatePlaceholder");
+  document.getElementById("gateBtn").textContent = t("gateButton");
+  document.getElementById("gateError").textContent = t("gateError");
+  gate.classList.remove("hidden");
+  const input = document.getElementById("gatePassInput");
+  const err = document.getElementById("gateError");
+  setTimeout(()=> input.focus(), 60);
+  document.getElementById("gateForm").addEventListener("submit", (e)=>{
+    e.preventDefault();
+    if(input.value === GATE_PASSPHRASE){
+      setGatePassed();
+      gate.classList.add("hidden");
+      init();
+    } else {
+      err.classList.remove("hidden");
+      input.value = "";
+      input.focus();
+    }
+  });
+}
+if(gatePassed()){ init(); } else { showGate(); }
 })();
 </script>
 </body>
