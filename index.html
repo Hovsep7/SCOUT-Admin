@@ -600,6 +600,8 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
   padding:6px 10px; font-size:.82rem; font-family:inherit; text-transform:uppercase;
 }
 .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:16px}
+.file-viewer-modal{max-width:900px}
+.file-viewer-modal iframe, .file-viewer-modal video{display:block}
 
 .footer-note{text-align:center; color:var(--ink-dim); font-size:.75rem; margin-top:28px}
 
@@ -789,6 +791,7 @@ const STR = {
     dbError: "Պահուածքի հետ կապի խնդիր. փոփոխութիւնները կրնան չգրանցուիլ։",
     topics: "նիւթ", scoutsCount: "սկաուտ",
     openBook: "Բանալ Գիրքը (PDF)",
+    openExternally: "Բանալ նոր պատուհանով",
     otherCategories: "Այլ Բաժիններ",
     addCategory: "+ Աւելցնել Բաժին", categoryName: "Բաժինի անուն", color: "Գոյն", customColor: "Ընտրովի գոյն",
     addItem: "+ Աւելցնել նիւթ", itemTitle: "Վերնագիր", description: "Նկարագրութիւն",
@@ -973,6 +976,7 @@ const STR = {
     dbError: "Trouble reaching shared storage — changes may not have saved.",
     topics: "topics", scoutsCount: "scouts",
     openBook: "Open the Book (PDF)",
+    openExternally: "Open in new tab",
     otherCategories: "Other Categories",
     addCategory: "+ Add Category", categoryName: "Category name", color: "Color", customColor: "Custom color",
     addItem: "+ Add item", itemTitle: "Title", description: "Description",
@@ -2489,7 +2493,7 @@ function renderDetailOverlay(isNewlyOpened){
         </div>
       </div>
       <div class="rank-section-body">
-        ${r.bookUrl ? `<a class="book-link" href="${esc(r.bookUrl)}" target="_blank" rel="noopener">📘 ${esc(t('openBook'))}</a>` : ""}
+        ${r.bookUrl ? `<a class="book-link" href="javascript:void(0)" data-action="openBook" data-url="${esc(r.bookUrl)}">📘 ${esc(t('openBook'))}</a>` : ""}
         <div class="rank-req">${reqLine}</div>
         ${rows}
       </div>
@@ -2583,7 +2587,7 @@ function renderCurriculum(){
         <span class="caret">›</span>
       </div>
       <div class="rank-section-body">
-        ${r.bookUrl ? `<a class="book-link" href="${esc(r.bookUrl)}" target="_blank" rel="noopener">📘 ${esc(t('openBook'))}</a>` : ""}
+        ${r.bookUrl ? `<a class="book-link" href="javascript:void(0)" data-action="openBook" data-url="${esc(r.bookUrl)}">📘 ${esc(t('openBook'))}</a>` : ""}
         <div class="req-grid">${reqFields}</div>
         ${rows}
         <div style="margin-top:8px"><button class="btn small gold" data-action="addTopic" data-rank="${r.id}">${esc(t('addTopic'))}</button></div>
@@ -2630,12 +2634,52 @@ function attachmentIcon(url){
   if(/drive\.google\.com/.test(u)) return "📁";
   return "🔗";
 }
+function viewerKind(url){
+  const u = (url||"").toLowerCase();
+  if(/\.(png|jpe?g|gif|webp|svg)(\?|$)/.test(u)) return {kind:"image"};
+  if(/\.pdf(\?|$)/.test(u)) return {kind:"pdf"};
+  if(/\.(mp4|mov|webm)(\?|$)/.test(u)) return {kind:"video"};
+  const yt = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
+  if(yt) return {kind:"youtube", id: yt[1]};
+  const vim = u.match(/vimeo\.com\/(\d+)/);
+  if(vim) return {kind:"vimeo", id: vim[1]};
+  return null;
+}
+function openFileViewer(url, label){
+  if(!url) return;
+  const info = viewerKind(url);
+  if(!info){ window.open(url, "_blank", "noopener"); return; }
+  let body;
+  if(info.kind==="image"){
+    body = `<img src="${esc(url)}" style="max-width:100%; max-height:70vh; display:block; margin:0 auto; border-radius:10px" />`;
+  } else if(info.kind==="pdf"){
+    body = `<iframe src="${esc(url)}" style="width:100%; height:70vh; border:none; border-radius:10px; background:#fff"></iframe>`;
+  } else if(info.kind==="video"){
+    body = `<video src="${esc(url)}" controls style="width:100%; max-height:70vh; border-radius:10px; background:#000"></video>`;
+  } else if(info.kind==="youtube"){
+    body = `<iframe src="https://www.youtube.com/embed/${esc(info.id)}" style="width:100%; height:70vh; border:none; border-radius:10px" allowfullscreen></iframe>`;
+  } else if(info.kind==="vimeo"){
+    body = `<iframe src="https://player.vimeo.com/video/${esc(info.id)}" style="width:100%; height:70vh; border:none; border-radius:10px" allowfullscreen></iframe>`;
+  }
+  const root = document.getElementById("modalRoot");
+  root.classList.remove("hidden");
+  root.innerHTML = `<div class="modal file-viewer-modal">
+    <h3>${esc(label||"")}</h3>
+    ${body}
+    <div class="modal-actions">
+      <a class="btn" href="${esc(url)}" target="_blank" rel="noopener">${esc(t('openExternally'))} ↗</a>
+      <button class="btn" data-action="closeModal">${esc(t('close'))}</button>
+    </div>
+  </div>`;
+  root.querySelector("[data-action='closeModal']").addEventListener("click", closeModal);
+  root.addEventListener("click", (e2)=>{ if(e2.target===root) closeModal(); });
+}
 function attachmentChipsHtml(item, kind, editable){
   const list = Array.isArray(item.attachments) ? item.attachments : [];
   if(!list.length && !editable) return "";
   const chips = list.map(a=> `
     <span class="attach-chip">
-      <a href="${esc(a.url)}" target="_blank" rel="noopener">${attachmentIcon(a.url)} ${esc(a.label || a.url)}</a>
+      <a href="javascript:void(0)" data-action="openAttachment" data-url="${esc(a.url)}" data-label="${esc(a.label || a.url)}">${attachmentIcon(a.url)} ${esc(a.label || a.url)}</a>
       ${editable ? `<button type="button" class="attach-x" data-action="removeAttachment" data-kind="${kind}" data-id="${item.id}" data-aid="${a.id}" title="${esc(t('removeAttachment'))}">✕</button>` : ""}
     </span>`).join("");
   const addBtn = editable ? `<button type="button" class="btn small ghost" data-action="addAttachment" data-kind="${kind}" data-id="${item.id}">📎 ${esc(t('addAttachment'))}</button>` : "";
@@ -3289,6 +3333,8 @@ function onAction(e){
     });
   }
   else if(action==="addScout"){ openAddScoutModal(); }
+  else if(action==="openBook"){ openFileViewer(el.dataset.url, t('openBook')); }
+  else if(action==="openAttachment"){ openFileViewer(el.dataset.url, el.dataset.label || el.dataset.url); }
   else if(action==="cycleStatus"){
     const scoutId = el.dataset.scout, topicId = el.dataset.topic;
     const cur = statusFor(scoutId, topicId);
