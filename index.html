@@ -305,8 +305,16 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .rank-section-head h3{font-size:.95rem}
 .rank-section-head .caret{transition:transform .15s; color:var(--ink-dim); display:inline-block}
 .rank-section.open .caret{transform:rotate(90deg)}
-.rank-section-body{display:none; padding:10px 14px 14px}
-.rank-section.open .rank-section-body{display:block}
+/* Smooth expand/collapse without measuring heights in JS: the body is a single-row
+   grid track animated between 0fr (fully collapsed, no layout cost) and 1fr (its
+   natural content height); the inner wrapper clips content mid-animation and carries
+   the padding, since padding on the grid track itself would never shrink to zero. */
+.rank-section-body{
+  display:grid; grid-template-rows:0fr; overflow:hidden;
+  transition:grid-template-rows .25s ease;
+}
+.rank-section.open .rank-section-body{grid-template-rows:1fr}
+.rank-section-body-inner{overflow:hidden; min-height:0; padding:10px 14px 14px}
 .rank-req{font-size:.78rem; color:var(--ink-dim); margin:2px 0 10px; line-height:1.5}
 .rank-req b{color:var(--ink)}
 .req-check-row{display:flex; align-items:flex-start; gap:8px; padding:3px 0; cursor:pointer}
@@ -349,9 +357,14 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .topic-title{font-size:.87rem; font-weight:600}
 .topic-page{font-size:.72rem; color:var(--ink-dim); white-space:nowrap}
 .topic-status-label{font-size:.72rem; margin-top:2px; color:var(--ink-dim)}
-.topic-detail{font-size:.8rem; color:var(--ink-dim); margin-top:6px; line-height:1.5; display:none}
-.topic-detail.open{display:block}
-.topic-detail div+div{margin-top:4px}
+.topic-detail{
+  display:grid; grid-template-rows:0fr; overflow:hidden; margin-top:6px;
+  transition:grid-template-rows .22s ease;
+  font-size:.8rem; color:var(--ink-dim); line-height:1.5;
+}
+.topic-detail.open{grid-template-rows:1fr}
+.topic-detail-inner{overflow:hidden; min-height:0}
+.topic-detail-inner div+div{margin-top:4px}
 .topic-photo-row{display:flex; align-items:center; gap:8px; margin-top:6px}
 .topic-photo-thumb{width:44px; height:44px; object-fit:cover; border-radius:8px; cursor:pointer; box-shadow:var(--shadow); flex:none}
 .topic-edited-by{font-size:.7rem; opacity:.75; font-style:italic}
@@ -435,8 +448,12 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .sched-side-block h4 .caret{transition:transform .15s; display:inline-block; flex:none; color:var(--ink-dim)}
 .sched-side-block.open h4{margin-bottom:6px}
 .sched-side-block.open h4 .caret{transform:rotate(90deg)}
-.sched-side-block-body{display:none}
-.sched-side-block.open .sched-side-block-body{display:block}
+.sched-side-block-body{
+  display:grid; grid-template-rows:0fr; overflow:hidden;
+  transition:grid-template-rows .2s ease;
+}
+.sched-side-block.open .sched-side-block-body{grid-template-rows:1fr}
+.sched-side-block-body-inner{overflow:hidden; min-height:0}
 .sched-search-input{
   width:100%; border:none; background:var(--panel-2); color:var(--ink); border-radius:8px; padding:8px 10px;
   font-size:.85rem; font-family:inherit; margin-bottom:10px;
@@ -451,6 +468,34 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .timeline-wrap{flex:2 1 420px; min-width:280px; background:var(--panel); border-radius:12px; box-shadow:var(--shadow); overflow:hidden}
 .timeline-scroll{max-height:640px; overflow-y:auto; position:relative}
 .timeline{position:relative; touch-action:pan-y}
+.sched-view-toggle{display:inline-flex; background:var(--panel-2); border-radius:999px; padding:3px; gap:2px}
+.sched-view-btn{
+  border:none; background:transparent; color:var(--ink-dim); padding:6px 12px; border-radius:999px;
+  font-size:.78rem; font-weight:600; cursor:pointer; white-space:nowrap;
+}
+.sched-view-btn.active{background:var(--navy); color:var(--navy-ink)}
+.sched-list{
+  flex:2 1 420px; min-width:280px; background:var(--panel); border-radius:12px; box-shadow:var(--shadow);
+  padding:8px; max-height:640px; overflow-y:auto;
+}
+.sched-list-row{
+  display:flex; align-items:center; gap:10px; padding:9px 8px; border-radius:10px;
+}
+.sched-list-row:hover{background:var(--panel-2)}
+.sched-list-row + .sched-list-row{border-top:1px solid var(--panel-2)}
+.sched-list-swatch{width:10px; height:10px; border-radius:50%; flex:none}
+.sched-list-main{flex:1; min-width:0; cursor:pointer}
+.sched-list-title{font-size:.88rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.sched-list-time{font-size:.76rem; color:var(--ink-dim); margin-top:1px}
+.sched-list-controls{display:flex; gap:4px; flex:none}
+.sched-list-arrow{
+  border:none; background:var(--panel-2); color:var(--ink-dim); width:26px; height:26px; border-radius:7px;
+  cursor:pointer; font-size:.72rem; display:flex; align-items:center; justify-content:center;
+}
+.sched-list-arrow:hover{background:var(--gold); color:var(--gold-ink)}
+.sched-list-arrow:disabled{opacity:.3; cursor:default}
+.sched-list-arrow:disabled:hover{background:var(--panel-2); color:var(--ink-dim)}
+.sched-list-arrow.danger:hover{background:var(--st-weak); color:#fff}
 .tl-drop-indicator{
   position:absolute; left:60px; right:8px; height:3px; border-radius:2px; background:var(--gold);
   opacity:0; pointer-events:none; transform:translateY(-1px); box-shadow:0 0 0 3px rgba(230,190,80,.25);
@@ -997,6 +1042,12 @@ const STR = {
     activityPointEntryDeleted: "{team}ի Նիշի գրառում մը ջնջուեցաւ",
     printSessionPlan: "Տպել Հանդիպումին Ծրագիրը",
     jumpToNow: "📍 Հիմա",
+    scheduleViewMode: "Ծրագիրին Տեսք",
+    timelineView: "Ժամացոյց",
+    listView: "Ցանկ",
+    moveBlockUp: "Վեր Հանել",
+    moveBlockDown: "Վար Իջեցնել",
+    emptySchedList: "Այս հանդիպումին համար դեռ բաժին մը աւելցուած չէ։",
     attachments: "Կցորդներ",
     addAttachment: "Աւելցնել Կցորդ",
     attachmentUrl: "Կապ (URL)",
@@ -1193,6 +1244,12 @@ const STR = {
     activityPointEntryDeleted: "A point entry for {team} was deleted",
     printSessionPlan: "Print Session Plan",
     jumpToNow: "📍 Now",
+    scheduleViewMode: "Schedule View",
+    timelineView: "Timeline",
+    listView: "List",
+    moveBlockUp: "Move Up",
+    moveBlockDown: "Move Down",
+    emptySchedList: "No blocks added to this schedule yet.",
     attachments: "Attachments",
     addAttachment: "Add Attachment",
     attachmentUrl: "Link (URL)",
@@ -1266,6 +1323,12 @@ let attendanceHeatmapMonth = todayStr().slice(0,7);
 let schedSourceQuery = "";
 let openSchedSourceGroups = new Set();
 let pendingCelebration = null;
+/* "timeline" (drag on a visual day grid) or "list" (a plain sorted list of
+   blocks with reorder/edit/delete controls) -- a simple accessible
+   alternative to dragging, and easier to scan on a small phone screen.
+   Remembered across sessions like the language/theme choice. */
+let scheduleViewMode = "timeline";
+try{ scheduleViewMode = localStorage.getItem("araratian_sched_view") || "timeline"; }catch(err){}
 
 const DAY_START = 8*60, DAY_END = 22*60, PX_PER_MIN = 1.4;
 let drag = null; // {mode, blockId, startClientY, originStart, originDuration, elTop, elHeight}
@@ -1321,6 +1384,29 @@ function animateAvatarRings(){
         el.style.setProperty("--pct", el.dataset.pct);
       });
     });
+  });
+}
+/* Dashboard KPI tiles count up from 0 to their real value instead of just
+   appearing -- same "bake the end state as a data attribute, animate it in
+   with JS after the node lands" approach as the avatar rings above, since a
+   text node has no CSS transition to lean on the way --pct does. */
+function animateDashboardCounts(){
+  const nums = document.querySelectorAll(".dash-stat-num[data-count-target]");
+  if(!nums.length) return;
+  const reduced = prefersReducedMotion();
+  nums.forEach(el=>{
+    const target = parseInt(el.dataset.countTarget, 10) || 0;
+    if(reduced || target === 0){ el.textContent = target; return; }
+    const duration = 700;
+    const start = performance.now();
+    function tick(now){
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.round(target * eased);
+      if(progress < 1) requestAnimationFrame(tick);
+      else el.textContent = target;
+    }
+    requestAnimationFrame(tick);
   });
 }
 
@@ -1836,7 +1922,7 @@ function triggerHapticBuzz(){
 function triggerCelebration(scoutId, rankId){
   const s = scouts[scoutId], r = ranks[rankId];
   if(!s || !r) return;
-  if(!prefersReducedMotion()) showConfetti();
+  if(!prefersReducedMotion()) showConfetti(confettiPaletteForColor(r.color));
   playCelebrationChime();
   triggerHapticBuzz();
   const toast = document.createElement("div");
@@ -1847,10 +1933,27 @@ function triggerCelebration(scoutId, rankId){
   else { requestAnimationFrame(()=> toast.classList.add("show")); }
   setTimeout(()=>{ toast.classList.remove("show"); setTimeout(()=> toast.remove(), 400); }, 3200);
 }
-function showConfetti(){
+/* Lighten (positive percent) or darken (negative) a #rrggbb color by blending it
+   toward white or black. Used to build a small tonal confetti palette out of a
+   single rank color instead of firing generic random colors for every rank. */
+function shadeColor(hex, percent){
+  if(!/^#[0-9a-fA-F]{6}$/.test(hex)) return hex;
+  const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  const t2 = percent > 0 ? 255 : 0, p = Math.abs(percent);
+  const mix = c => clamp(c + (t2 - c) * p);
+  return "#" + [mix(r), mix(g), mix(b)].map(c=> c.toString(16).padStart(2,"0")).join("");
+}
+/* A rank's own color plus a lighter tint, a darker shade, and a gold sparkle accent
+   -- confetti reads as "this rank's colors" rather than a generic random shower. */
+function confettiPaletteForColor(hex){
+  if(!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return ["#2C5A86","#1F6B52","#5B3A94","#8A5C0A","#E6BE50","#D61616"];
+  return [hex, shadeColor(hex, 0.35), shadeColor(hex, -0.3), "#E6BE50"];
+}
+function showConfetti(colors){
   const layer = document.createElement("div");
   layer.className = "confetti-layer";
-  const colors = ["#2C5A86","#1F6B52","#5B3A94","#8A5C0A","#E6BE50","#D61616"];
+  colors = colors && colors.length ? colors : ["#2C5A86","#1F6B52","#5B3A94","#8A5C0A","#E6BE50","#D61616"];
   for(let i=0;i<48;i++){
     const p = document.createElement("span");
     p.className = "confetti-piece";
@@ -2366,6 +2469,7 @@ function render(){
   if(view==="schedule") positionTimelineBlocks();
   restoreScrollState(scrollState);
   animateAvatarRings();
+  if(view==="dashboard") animateDashboardCounts();
   if(pendingCelebration){ const c = pendingCelebration; pendingCelebration = null; triggerCelebration(c.scoutId, c.rankId); }
 }
 
@@ -2605,6 +2709,7 @@ function renderDetailOverlay(isNewlyOpened){
           </div>
           <div class="topic-status-label">${esc(t(STATUS_META[st].labelKey))}</div>
           <div class="topic-detail ${detailOpen?"open":""}">
+           <div class="topic-detail-inner">
             <div>${esc(loc(tp,"summary"))}</div>
             <div>${esc(loc(tp,"knowledge"))}</div>
             ${attachmentChipsHtml(tp, "topic", false)}
@@ -2616,6 +2721,7 @@ function renderDetailOverlay(isNewlyOpened){
                 : `<button type="button" class="btn small ghost" data-action="triggerTopicPhoto" data-scout="${s.id}" data-topic="${tp.id}">📷 ${esc(t('attachPhoto'))}</button>`}
               <input type="file" accept="image/*" class="topic-photo-input" data-scout="${s.id}" data-topic="${tp.id}" hidden />
             </div>
+           </div>
           </div>
         </div>
       </div>`;
@@ -2630,9 +2736,11 @@ function renderDetailOverlay(isNewlyOpened){
         </div>
       </div>
       <div class="rank-section-body">
+       <div class="rank-section-body-inner">
         ${r.bookUrl ? `<a class="book-link" href="javascript:void(0)" data-action="openBook" data-url="${esc(r.bookUrl)}">📘 ${esc(t('openBook'))}</a>` : ""}
         <div class="rank-req">${reqLine}</div>
         ${rows}
+       </div>
       </div>
     </div>`;
   }).join("");
@@ -2733,10 +2841,12 @@ function renderCurriculum(){
         <span class="caret">›</span>
       </div>
       <div class="rank-section-body">
+       <div class="rank-section-body-inner">
         ${r.bookUrl ? `<a class="book-link" href="javascript:void(0)" data-action="openBook" data-url="${esc(r.bookUrl)}">📘 ${esc(t('openBook'))}</a>` : ""}
         <div class="req-grid">${reqFields}</div>
         <div class="curr-cards-grid">${rows}</div>
         <div style="margin-top:8px"><button class="btn small gold" data-action="addTopic" data-rank="${r.id}">${esc(t('addTopic'))}</button></div>
+       </div>
       </div>
     </div>`;
   }).join("");
@@ -2753,6 +2863,7 @@ function renderCurriculum(){
         <span class="caret">›</span>
       </div>
       <div class="rank-section-body">
+       <div class="rank-section-body-inner">
         <input type="text" data-catname="hy" data-cat="${c.id}" value="${esc(c.nameHy||"")}" placeholder="${esc(t('categoryName'))} (ՀԱՅ)" style="margin-bottom:6px; width:100%; border:none; background:var(--panel-2); border-radius:8px; padding:6px 9px; font-size:.82rem; color:var(--ink)" />
         <input type="text" data-catname="en" data-cat="${c.id}" value="${esc(c.nameEn||"")}" placeholder="${esc(t('categoryName'))} (EN)" style="margin-bottom:8px; width:100%; border:none; background:var(--panel-2); border-radius:8px; padding:6px 9px; font-size:.82rem; color:var(--ink)" />
         <div class="curr-cards-grid">${rows}</div>
@@ -2760,6 +2871,7 @@ function renderCurriculum(){
           <button class="btn small gold" data-action="addCatItem" data-cat="${c.id}">${esc(t('addItem'))}</button>
           <button class="btn small danger" data-action="deleteCategory" data-id="${c.id}">${esc(t('delete'))}</button>
         </div>
+       </div>
       </div>
     </div>`;
   }).join("");
@@ -2901,9 +3013,13 @@ function renderSchedule(){
     </label>
     ${sessionNavHtml(scheduleDate, "stepScheduleDate", "scheduleDateJump")}
     <button class="btn primary" data-action="addSchedule">${esc(t('addSchedule'))}</button>
-    ${activeScheduleId && scheduleDate===todayStr() ? `<button class="btn small" data-action="jumpToNow">${esc(t('jumpToNow'))}</button>` : ""}
+    ${activeScheduleId && scheduleDate===todayStr() && scheduleViewMode==="timeline" ? `<button class="btn small" data-action="jumpToNow">${esc(t('jumpToNow'))}</button>` : ""}
     ${activeScheduleId ? `<button class="btn small" data-action="printSessionPlan" data-id="${activeScheduleId}">🖨 ${esc(t('printSessionPlan'))}</button>` : ""}
     ${activeScheduleId ? `<button class="btn danger small" data-action="deleteSchedule" data-id="${activeScheduleId}">${esc(t('delete'))}</button>` : ""}
+    <div class="sched-view-toggle" role="group" aria-label="${esc(t('scheduleViewMode'))}">
+      <button class="sched-view-btn ${scheduleViewMode==="timeline"?"active":""}" data-action="setScheduleViewMode" data-mode="timeline" title="${esc(t('timelineView'))}">📅 ${esc(t('timelineView'))}</button>
+      <button class="sched-view-btn ${scheduleViewMode==="list"?"active":""}" data-action="setScheduleViewMode" data-mode="list" title="${esc(t('listView'))}">📋 ${esc(t('listView'))}</button>
+    </div>
   </div>
   <div class="sched-pills">${pills}</div>`;
 
@@ -2942,7 +3058,7 @@ function renderSchedule(){
         <span>${label} <span style="font-weight:400; opacity:.7">(${filtered.length})</span></span>
         <span class="caret">›</span>
       </h4>
-      <div class="sched-side-block-body">${chips}</div>
+      <div class="sched-side-block-body"><div class="sched-side-block-body-inner">${chips}</div></div>
     </div>`;
   }
   const sideRanks = rlist.map(r=>
@@ -2978,6 +3094,42 @@ function renderSchedule(){
     </div>`;
   }).join("");
 
+  /* List view: the same blocks as plain sorted rows with move-up/down, edit
+     (tap the row, same modal the timeline uses) and delete controls -- an
+     alternative that doesn't need a drag gesture at all, easier to scan on a
+     small phone screen and friendlier for anyone who finds the timeline's
+     drag interaction awkward. */
+  const listRows = blocks.map((b, i)=>{
+    const startLbl = minLabel(b.startMin), endLbl = minLabel(b.startMin+b.durationMin);
+    const bg = b.color||'#0C3953';
+    return `
+    <div class="sched-list-row" data-block="${b.id}">
+      <span class="sched-list-swatch" style="background:${esc(bg)}"></span>
+      <div class="sched-list-main" data-action="openBlockModal" data-id="${b.id}">
+        <div class="sched-list-title">${esc(blockDisplayTitle(b))}</div>
+        <div class="sched-list-time">${startLbl}–${endLbl}</div>
+      </div>
+      <div class="sched-list-controls">
+        <button type="button" class="sched-list-arrow" data-action="moveBlockInList" data-block="${b.id}" data-dir="-1" title="${esc(t('moveBlockUp'))}" ${i===0?"disabled":""}>▲</button>
+        <button type="button" class="sched-list-arrow" data-action="moveBlockInList" data-block="${b.id}" data-dir="1" title="${esc(t('moveBlockDown'))}" ${i===blocks.length-1?"disabled":""}>▼</button>
+        <button type="button" class="sched-list-arrow danger" data-action="deleteBlockFromList" data-block="${b.id}" title="${esc(t('delete'))}">✕</button>
+      </div>
+    </div>`;
+  }).join("") || `<div class="empty-state">${esc(t('emptySchedList'))}</div>`;
+
+  const mainPaneHtml = scheduleViewMode === "list"
+    ? `<div class="sched-list">${listRows}</div>`
+    : `
+    <div class="timeline-wrap">
+      <div class="timeline-scroll">
+        <div class="timeline" id="timelineEl" style="height:${totalHeight}px">
+          ${hourRows.join("")}
+          ${blockEls}
+          ${nowLineHtml(scheduleDate)}
+        </div>
+      </div>
+    </div>`;
+
   return toolbar + templateBar + `
   <div class="sched-layout">
     <div class="sched-side">
@@ -2989,15 +3141,7 @@ function renderSchedule(){
       ${sideRanks}
       ${sideCats ? `<div style="font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-dim); margin:8px 0 4px">${esc(t('fromCategories'))}</div>${sideCats}` : ""}
     </div>
-    <div class="timeline-wrap">
-      <div class="timeline-scroll">
-        <div class="timeline" id="timelineEl" style="height:${totalHeight}px">
-          ${hourRows.join("")}
-          ${blockEls}
-          ${nowLineHtml(scheduleDate)}
-        </div>
-      </div>
-    </div>
+    ${mainPaneHtml}
   </div>`;
 }
 function minLabel(m){
@@ -3044,6 +3188,7 @@ function scrollTimelineToNow(force, smooth){
   else tl.scrollTop = target;
 }
 function maybeAutoScrollToNow(){
+  if(scheduleViewMode !== "timeline") return; // nothing to scroll in list view; don't consume the once-per-schedule key
   if(scheduleDate !== todayStr()) return;
   const key = scheduleDate + "|" + activeScheduleId;
   if(autoScrolledScheduleKey === key) return;
@@ -3279,10 +3424,10 @@ function renderDashboard(){
 
   const statsHtml = `
   <div class="dash-stats">
-    <div class="dash-stat"><div class="dash-stat-icon">🧑‍🤝‍🧑</div><div class="dash-stat-num">${list.length}</div><div class="dash-stat-label">${esc(t('dashStatScouts'))}</div></div>
-    <div class="dash-stat"><div class="dash-stat-icon">📅</div><div class="dash-stat-num">${sessionCount}</div><div class="dash-stat-label">${esc(t('dashStatSessions'))}</div></div>
-    <div class="dash-stat"><div class="dash-stat-icon">🏅</div><div class="dash-stat-num">${readyToAdvance}</div><div class="dash-stat-label">${esc(t('dashStatReady'))}</div></div>
-    <div class="dash-stat ${consecutiveAbsent.length ? 'dash-stat-warn' : ''}"><div class="dash-stat-icon">⚠️</div><div class="dash-stat-num">${consecutiveAbsent.length}</div><div class="dash-stat-label">${esc(t('dashStatFlagged'))}</div></div>
+    <div class="dash-stat"><div class="dash-stat-icon">🧑‍🤝‍🧑</div><div class="dash-stat-num" data-count-target="${list.length}">0</div><div class="dash-stat-label">${esc(t('dashStatScouts'))}</div></div>
+    <div class="dash-stat"><div class="dash-stat-icon">📅</div><div class="dash-stat-num" data-count-target="${sessionCount}">0</div><div class="dash-stat-label">${esc(t('dashStatSessions'))}</div></div>
+    <div class="dash-stat"><div class="dash-stat-icon">🏅</div><div class="dash-stat-num" data-count-target="${readyToAdvance}">0</div><div class="dash-stat-label">${esc(t('dashStatReady'))}</div></div>
+    <div class="dash-stat ${consecutiveAbsent.length ? 'dash-stat-warn' : ''}"><div class="dash-stat-icon">⚠️</div><div class="dash-stat-num" data-count-target="${consecutiveAbsent.length}">0</div><div class="dash-stat-label">${esc(t('dashStatFlagged'))}</div></div>
   </div>`;
 
   const consecutiveAbsentHtml = consecutiveAbsent.length ? consecutiveAbsent.map(({s,streak})=>`
@@ -3694,7 +3839,20 @@ function onAction(e){
       deleteWhere("scheduleBlocks","scheduleId", el.dataset.id); deleteDoc("schedules", el.dataset.id); activeScheduleId = null; render();
     });
   }
-  else if(action==="openBlockModal"){ openBlockModal(); }
+  else if(action==="openBlockModal"){ openBlockModal(el.dataset.id || null); }
+  else if(action==="setScheduleViewMode"){
+    scheduleViewMode = el.dataset.mode;
+    try{ localStorage.setItem("araratian_sched_view", scheduleViewMode); }catch(err){}
+    render();
+  }
+  else if(action==="moveBlockInList"){ moveBlockInList(el.dataset.block, parseInt(el.dataset.dir,10)); }
+  else if(action==="deleteBlockFromList"){
+    const b = scheduleBlocks[el.dataset.block]; if(!b) return;
+    confirmAction(t("deleteBlockConfirm"), ()=>{
+      logActivity(t("activityBlockDeleted").replace("{title}", blockDisplayTitle(b)));
+      deleteDoc("scheduleBlocks", b.id); render();
+    });
+  }
   else if(action==="addBlockFromSource"){ addBlockFromSource(el.dataset.kind, el.dataset.source); }
   else if(action==="toggleSchedSourceGroup"){
     const key = el.dataset.group;
@@ -3917,6 +4075,26 @@ function openAddBlockModalAt(startMin){
   if(id){ render(); openBlockModal(id); }
 }
 
+/* Reordering in list view swaps the two blocks' start times (each keeps its
+   own duration) rather than trying to re-flow the whole day -- the simplest
+   rule that does what "move this one up/down" visibly looks like, without
+   silently resizing anything. Since nothing in this app enforces blocks not
+   to overlap (the timeline itself allows overlapping drags today), a swap
+   that happens to overlap an adjacent block is no different from what
+   dragging already permits. */
+function moveBlockInList(blockId, dir){
+  const b = scheduleBlocks[blockId];
+  if(!b) return;
+  const list = blocksForSchedule(b.scheduleId);
+  const idx = list.findIndex(x=>x.id===blockId);
+  const swapIdx = idx + dir;
+  if(idx<0 || swapIdx<0 || swapIdx>=list.length) return;
+  const other = list[swapIdx];
+  const aStart = b.startMin, bStart = other.startMin;
+  mergeDoc("scheduleBlocks", b.id, {startMin: bStart});
+  mergeDoc("scheduleBlocks", other.id, {startMin: aStart});
+  render();
+}
 function openBlockModal(existingId){
   const root = document.getElementById("modalRoot");
   const b = existingId ? scheduleBlocks[existingId] : null;
