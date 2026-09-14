@@ -51,6 +51,26 @@
   --st-none:#8b9095; --st-weak:#e5695a; --st-prog:#f0983c; --st-done:#3fae63;
   --shadow:0 1px 2px rgba(0,0,0,.35),0 10px 28px rgba(0,0,0,.4);
 }
+/* ---- display density ----
+   Nearly every font-size in this stylesheet is written in rem, so scaling
+   the root font-size scales all of that text uniformly for free. The handful
+   of rules below on top of that tighten (compact) or loosen (large) the
+   fixed-px padding/gap on the most repeated list/card containers, so density
+   visibly changes list length and touch-target size too, not just text. */
+:root[data-density="compact"]{ font-size:14px; }
+:root[data-density="large"]{ font-size:18.5px; }
+:root[data-density="compact"] .scout-card{ padding:9px 10px 9px 9px; gap:6px; }
+:root[data-density="compact"] .curr-card{ padding:8px; gap:4px; }
+:root[data-density="compact"] .att-row{ padding:6px 10px; gap:8px; }
+:root[data-density="compact"] .topic-row{ padding:6px 0; gap:8px; }
+:root[data-density="compact"] .leaderboard-row{ padding:4px 0; gap:8px; }
+:root[data-density="compact"] .sched-list-row{ padding:6px 6px; gap:8px; }
+:root[data-density="large"] .scout-card{ padding:18px 18px 18px 16px; gap:13px; }
+:root[data-density="large"] .curr-card{ padding:16px; gap:9px; }
+:root[data-density="large"] .att-row{ padding:13px 16px; gap:12px; }
+:root[data-density="large"] .topic-row{ padding:13px 0; gap:12px; }
+:root[data-density="large"] .leaderboard-row{ padding:10px 0; gap:12px; }
+:root[data-density="large"] .sched-list-row{ padding:12px 8px; gap:12px; }
 *{box-sizing:border-box}
 body{
   background:var(--bg); color:var(--ink); margin:0;
@@ -219,6 +239,12 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .seg-weak{background:var(--st-weak)}
 .seg-prog{background:var(--st-prog)}
 .seg-done{background:var(--st-done)}
+/* A slim per-topic version of the same segmented bar, but counting SCOUTS
+   instead of topics -- how the whole troop is doing on this one topic, at a
+   glance, without opening every scout's roster entry. Reuses the .seg-*
+   color classes above so its palette always matches the rest of the app. */
+.heat-strip{height:5px; border-radius:999px; overflow:hidden; display:flex; background:var(--panel-3); margin-top:6px}
+.heat-strip > span{height:100%; display:block}
 .progress-label{display:flex; justify-content:space-between; font-size:.72rem; color:var(--ink-dim); margin-top:3px}
 
 /* ---- roster cards ---- */
@@ -238,12 +264,25 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
   inherits: true;
   initial-value: 0;
 }
+/* Registering --ring-color the same Houdini way as --pct above is what makes
+   a rank promotion's color change animate on its own: conic-gradient() reads
+   a registered <color> custom property as a first-class animatable value, so
+   transitioning --ring-color smoothly repaints the gradient through every
+   in-between hue instead of the flat color snap a plain custom property
+   would give. See avatarRingHtml()/animateAvatarRings() for how the "from"
+   color gets baked in on a promotion so there's something to transition
+   from. */
+@property --ring-color{
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #2C5A86;
+}
 .avatar-ring{
   --pct:0; --ring-color:var(--navy);
   position:relative; width:40px; height:40px; border-radius:50%; flex:none;
   display:flex; align-items:center; justify-content:center;
   background:conic-gradient(var(--ring-color) calc(var(--pct)*1%), var(--panel-3) 0);
-  transition:--pct .7s cubic-bezier(.16,.84,.44,1);
+  transition:--pct .7s cubic-bezier(.16,.84,.44,1), --ring-color 1.1s ease;
 }
 .avatar-ring::before{
   content:""; position:absolute; inset:3px; border-radius:50%; background:var(--panel);
@@ -251,6 +290,21 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .avatar-ring .avatar-initials{ position:relative; z-index:1; font-weight:800; font-size:.72rem; color:var(--ink); letter-spacing:.02em; }
 .avatar-ring.avatar-ring-lg{ width:52px; height:52px; }
 .avatar-ring.avatar-ring-lg .avatar-initials{ font-size:.85rem; }
+/* The rank-up "trail": a comet-like arc sweeps once around the ring in the
+   new rank's color while --ring-color (above) is busy morphing from the old
+   rank's color to the new one underneath it, so the promotion reads as a
+   single continuous motion rather than two unrelated effects. */
+.avatar-ring.ranking-up::after{
+  content:""; position:absolute; inset:-4px; border-radius:50%; pointer-events:none;
+  background:conic-gradient(from 0deg, transparent 0deg, var(--ring-color) 35deg, transparent 95deg);
+  animation:rank-trail-sweep 1.15s ease-out;
+  z-index:2;
+}
+@keyframes rank-trail-sweep{
+  0%{ transform:rotate(0deg); opacity:0; }
+  12%{ opacity:1; }
+  100%{ transform:rotate(360deg); opacity:0; }
+}
 .scout-name{font-weight:700; font-size:.98rem}
 .scout-role{color:var(--ink-dim); font-size:.78rem; margin-top:2px}
 .scout-patrol{display:flex; align-items:center; gap:5px; color:var(--ink-dim); font-size:.74rem; margin-top:3px}
@@ -305,16 +359,8 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .rank-section-head h3{font-size:.95rem}
 .rank-section-head .caret{transition:transform .15s; color:var(--ink-dim); display:inline-block}
 .rank-section.open .caret{transform:rotate(90deg)}
-/* Smooth expand/collapse without measuring heights in JS: the body is a single-row
-   grid track animated between 0fr (fully collapsed, no layout cost) and 1fr (its
-   natural content height); the inner wrapper clips content mid-animation and carries
-   the padding, since padding on the grid track itself would never shrink to zero. */
-.rank-section-body{
-  display:grid; grid-template-rows:0fr; overflow:hidden;
-  transition:grid-template-rows .25s ease;
-}
-.rank-section.open .rank-section-body{grid-template-rows:1fr}
-.rank-section-body-inner{overflow:hidden; min-height:0; padding:10px 14px 14px}
+.rank-section-body{display:none; padding:10px 14px 14px}
+.rank-section.open .rank-section-body{display:block}
 .rank-req{font-size:.78rem; color:var(--ink-dim); margin:2px 0 10px; line-height:1.5}
 .rank-req b{color:var(--ink)}
 .req-check-row{display:flex; align-items:flex-start; gap:8px; padding:3px 0; cursor:pointer}
@@ -357,14 +403,9 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .topic-title{font-size:.87rem; font-weight:600}
 .topic-page{font-size:.72rem; color:var(--ink-dim); white-space:nowrap}
 .topic-status-label{font-size:.72rem; margin-top:2px; color:var(--ink-dim)}
-.topic-detail{
-  display:grid; grid-template-rows:0fr; overflow:hidden; margin-top:6px;
-  transition:grid-template-rows .22s ease;
-  font-size:.8rem; color:var(--ink-dim); line-height:1.5;
-}
-.topic-detail.open{grid-template-rows:1fr}
-.topic-detail-inner{overflow:hidden; min-height:0}
-.topic-detail-inner div+div{margin-top:4px}
+.topic-detail{font-size:.8rem; color:var(--ink-dim); margin-top:6px; line-height:1.5; display:none}
+.topic-detail.open{display:block}
+.topic-detail div+div{margin-top:4px}
 .topic-photo-row{display:flex; align-items:center; gap:8px; margin-top:6px}
 .topic-photo-thumb{width:44px; height:44px; object-fit:cover; border-radius:8px; cursor:pointer; box-shadow:var(--shadow); flex:none}
 .topic-edited-by{font-size:.7rem; opacity:.75; font-style:italic}
@@ -392,6 +433,19 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
   padding:6px 8px; font-size:.79rem; font-family:inherit; resize:vertical;
 }
 .curr-editor-foot{display:flex; justify-content:space-between; align-items:center; margin-top:8px}
+/* Teaching notes are a leader's own shared scratchpad for delivering the
+   topic (materials, timing, common pitfalls) -- kept visually distinct from
+   the official bilingual curriculum text above it with a warm tint, so it
+   never gets mistaken for something that needs translating or matching the
+   book's wording. */
+.teaching-notes-block{
+  background:color-mix(in srgb, var(--gold) 12%, var(--panel)); border-radius:8px;
+  padding:8px 10px; margin-top:10px; border:1px dashed color-mix(in srgb, var(--gold) 45%, transparent);
+}
+.teaching-notes-block label{display:flex; align-items:center; gap:5px; font-weight:700; color:var(--ink) !important}
+.teaching-notes-block textarea{background:var(--panel) !important}
+.ci-title-row{display:flex; align-items:center; gap:5px}
+.teaching-notes-badge{font-size:.78rem; opacity:.85; flex:none}
 .attach-row{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0}
 .attach-chip{display:inline-flex; align-items:center; gap:4px; background:var(--panel-3); border-radius:999px; padding:4px 6px 4px 10px; font-size:.76rem}
 .attach-chip a{color:var(--navy); text-decoration:none; font-weight:600; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -448,12 +502,8 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .sched-side-block h4 .caret{transition:transform .15s; display:inline-block; flex:none; color:var(--ink-dim)}
 .sched-side-block.open h4{margin-bottom:6px}
 .sched-side-block.open h4 .caret{transform:rotate(90deg)}
-.sched-side-block-body{
-  display:grid; grid-template-rows:0fr; overflow:hidden;
-  transition:grid-template-rows .2s ease;
-}
-.sched-side-block.open .sched-side-block-body{grid-template-rows:1fr}
-.sched-side-block-body-inner{overflow:hidden; min-height:0}
+.sched-side-block-body{display:none}
+.sched-side-block.open .sched-side-block-body{display:block}
 .sched-search-input{
   width:100%; border:none; background:var(--panel-2); color:var(--ink); border-radius:8px; padding:8px 10px;
   font-size:.85rem; font-family:inherit; margin-bottom:10px;
@@ -527,6 +577,55 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .tl-block .tb-time{font-size:.66rem; opacity:.85}
 .tl-resize{position:absolute; left:0; right:0; bottom:0; height:14px; cursor:ns-resize; touch-action:none}
 .tl-resize::after{content:""; position:absolute; left:50%; bottom:2px; width:24px; height:3px; border-radius:2px; background:var(--grip, rgba(255,255,255,.6)); transform:translateX(-50%)}
+
+/* ---- multi-select blocks ---- */
+/* A small always-on toggle in the corner of every block, so selecting on a
+   touch screen never depends on a shift/ctrl-click a finger can't make.
+   Desktop users can still shift/ctrl/cmd-click the block body itself. */
+.tl-block.selected{outline:3px solid var(--gold); outline-offset:1px; box-shadow:0 3px 12px rgba(0,0,0,.32)}
+.tl-select-toggle{
+  position:absolute; top:3px; right:3px; width:18px; height:18px; border-radius:5px; z-index:5;
+  background:rgba(255,255,255,.32); border:1.5px solid var(--grip, rgba(255,255,255,.7));
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  font-size:.62rem; line-height:1; color:inherit; opacity:.75; padding:0;
+}
+.tl-select-toggle:hover{opacity:1}
+.tl-block.selected .tl-select-toggle{background:var(--gold); color:var(--gold-ink); border-color:var(--gold); opacity:1}
+.sched-list-row.selected{background:color-mix(in srgb, var(--gold) 16%, transparent)}
+.sched-list-check{flex:none; width:17px; height:17px; cursor:pointer; accent-color:var(--gold)}
+.bulk-select-bar{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--panel-2);
+  border-radius:10px; padding:8px 12px; margin:0 0 10px; font-size:.82rem;
+}
+.bulk-select-bar .bsb-count{font-weight:700}
+.bulk-select-swatches{display:flex; gap:5px; align-items:center}
+.bulk-select-swatch{
+  width:20px; height:20px; border-radius:50%; cursor:pointer; flex:none;
+  border:2px solid rgba(255,255,255,.65); box-shadow:0 1px 3px rgba(0,0,0,.25);
+}
+
+/* ---- keyboard shortcuts overlay ---- */
+.kbd-shortcuts-btn{font-size:1rem}
+.kbd-overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200;
+  display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.kbd-panel{
+  background:var(--panel); border-radius:14px; box-shadow:var(--shadow);
+  max-width:440px; width:100%; max-height:82vh; overflow-y:auto; padding:20px 22px;
+}
+.kbd-panel h3{margin:0 0 14px}
+.kbd-row{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:8px 0; border-bottom:1px solid var(--panel-2); font-size:.85rem;
+}
+.kbd-row:last-of-type{border-bottom:none}
+.kbd-keys{display:flex; gap:4px; flex:none}
+.kbd-key{
+  background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+  padding:2px 8px; font-family:monospace; font-size:.78rem; font-weight:700; color:var(--ink);
+}
+.kbd-close-hint{text-align:center; margin-top:14px; font-size:.72rem; color:var(--ink-dim)}
 
 /* ---- attendance ---- */
 .att-summary{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:14px; font-size:.82rem}
@@ -604,8 +703,17 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .leaderboard-row:first-child{border-top:none}
 .lb-rank{flex:none; width:26px; text-align:center; font-size:.95rem; font-weight:800; color:var(--ink-dim)}
 .lb-name{flex:none; width:130px; font-size:.86rem; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.lb-bar-track{flex:1; min-width:40px; height:9px; border-radius:999px; background:var(--panel-3); overflow:hidden}
-.lb-bar-fill{height:100%; border-radius:999px; transition:width .5s cubic-bezier(.16,.84,.44,1)}
+/* A diverging bar centered on zero: positive totals grow rightward from the
+   center in the team's own color, negative totals grow leftward from the
+   center in a flat "in the red" tone. Scaling each side off Math.abs() alone
+   used to make a -10 draw a LONGER bar than a +5 -- worse than every
+   positive team, but visually reading as more impressive than all of them.
+   Growing the opposite direction (and in a different, non-competing color)
+   fixes that without needing to hide negative totals altogether. */
+.lb-bar-track{flex:1; min-width:40px; height:9px; border-radius:999px; background:var(--panel-3); overflow:hidden; position:relative}
+.lb-bar-zero{position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--ink-dim); opacity:.3}
+.lb-bar-fill{position:absolute; top:0; height:100%; border-radius:999px; transition:width .5s cubic-bezier(.16,.84,.44,1), left .5s cubic-bezier(.16,.84,.44,1)}
+.lb-bar-fill.neg{background:var(--st-weak) !important}
 .lb-total{flex:none; width:48px; text-align:right; font-weight:800; color:var(--st-done)}
 .lb-total.neg{color:var(--st-weak)}
 .patrol-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px}
@@ -1005,6 +1113,9 @@ const STR = {
     themeMode_auto: "Տեսք՝ Ինքնաշխատ (Համակարգի)",
     themeMode_light: "Տեսք՝ Լուսաւոր",
     themeMode_dark: "Տեսք՝ Մութ",
+    densityMode_comfortable: "Խտութիւն՝ Սովորական",
+    densityMode_compact: "Խտութիւն՝ Խիտ",
+    densityMode_large: "Խտութիւն՝ Խոշոր Գիր",
     leaderboardTitle: "Խմբակներու Դասաւորում",
     activityReqChecked: "{scout} — {rank}. {req} նշուեցաւ իբրեւ կատարուած",
     activityReqUnchecked: "{scout} — {rank}. {req} նշումը հանուեցաւ",
@@ -1048,6 +1159,23 @@ const STR = {
     moveBlockUp: "Վեր Հանել",
     moveBlockDown: "Վար Իջեցնել",
     emptySchedList: "Այս հանդիպումին համար դեռ բաժին մը աւելցուած չէ։",
+    selectBlockTitle: "Ընտրել",
+    selectedCount: "ընտրուած",
+    cancelSelection: "Չեղարկել",
+    deleteSelected: "Ջնջել Ընտրուածները",
+    recolorSelected: "Փոխել Գոյնը",
+    bulkDeleteConfirm: "Ջնջե՞լ {count} ընտրուած բաժինները։",
+    keyboardShortcuts: "Ստեղնաշարի Դիւրանցումներ",
+    kbdRowTabs: "Անցնիլ բաժին",
+    kbdRowPrevNextTab: "Նախորդ / Յաջորդ բաժին",
+    kbdRowDeleteSelected: "Ջնջել ընտրուած բաժինները (Ծրագիր)",
+    kbdRowCloseEscape: "Փակել պատուհանը / ընտրութիւնը",
+    kbdRowShowThis: "Ցուցադրել այս ցանկը",
+    kbdCloseHint: "Սեղմել դուրս կամ Esc՝ փակելու համար",
+    teachingNotes: "📝 Դասավանդման Նշումներ",
+    teachingNotesPlaceholder: "Պիտանի է միայն պատասխանատուներուն համար՝ նիւթեր, ժամանակացոյց, խաղեր, յաճախակի սխալներ...",
+    teachingNotesBadgeTitle: "Ունի դասավանդման նշում",
+    heatStripTitle: "Ջոկատին {pct}%-ը իւրացուցած է այս նիւթը",
     attachments: "Կցորդներ",
     addAttachment: "Աւելցնել Կցորդ",
     attachmentUrl: "Կապ (URL)",
@@ -1207,6 +1335,9 @@ const STR = {
     themeMode_auto: "Theme: Auto (System)",
     themeMode_light: "Theme: Light",
     themeMode_dark: "Theme: Dark",
+    densityMode_comfortable: "Density: Comfortable",
+    densityMode_compact: "Density: Compact",
+    densityMode_large: "Density: Large Text",
     leaderboardTitle: "Team Leaderboard",
     activityReqChecked: "{scout} — {rank}. {req} marked complete",
     activityReqUnchecked: "{scout} — {rank}. {req} unmarked",
@@ -1250,6 +1381,23 @@ const STR = {
     moveBlockUp: "Move Up",
     moveBlockDown: "Move Down",
     emptySchedList: "No blocks added to this schedule yet.",
+    selectBlockTitle: "Select",
+    selectedCount: "selected",
+    cancelSelection: "Cancel",
+    deleteSelected: "Delete Selected",
+    recolorSelected: "Recolor",
+    bulkDeleteConfirm: "Delete {count} selected blocks.",
+    keyboardShortcuts: "Keyboard Shortcuts",
+    kbdRowTabs: "Jump to tab",
+    kbdRowPrevNextTab: "Previous / next tab",
+    kbdRowDeleteSelected: "Delete selected blocks (Schedule)",
+    kbdRowCloseEscape: "Close dialog / clear selection",
+    kbdRowShowThis: "Show this cheat-sheet",
+    kbdCloseHint: "Click outside or press Esc to close",
+    teachingNotes: "📝 Teaching Notes",
+    teachingNotesPlaceholder: "For leaders only -- materials needed, timing, games, common pitfalls...",
+    teachingNotesBadgeTitle: "Has teaching notes",
+    heatStripTitle: "{pct}% of the troop has mastered this topic",
     attachments: "Attachments",
     addAttachment: "Add Attachment",
     attachmentUrl: "Link (URL)",
@@ -1286,6 +1434,17 @@ function applyThemeMode(){
 }
 applyThemeMode();
 
+/* Display density: "comfortable" (default), "compact" (tighter rows, more
+   fits on screen), or "large" (bigger text throughout). See the
+   :root[data-density=...] rules near the top of the stylesheet. */
+const DENSITY_ORDER = ["comfortable","compact","large"];
+let DENSITY_MODE = (function(){
+  try{ const v = localStorage.getItem("araratian_density"); return DENSITY_ORDER.includes(v) ? v : "comfortable"; }
+  catch(e){ return "comfortable"; }
+})();
+function applyDensityMode(){ document.documentElement.setAttribute("data-density", DENSITY_MODE); }
+applyDensityMode();
+
 let dbNs = null;
 let dbFailed = false;
 
@@ -1308,6 +1467,13 @@ let openCurrRanks = new Set([]);
 let openCurrCats = new Set([]);
 let curriculumQuery = "";
 let justChangedKey = null;
+/* Rank-up trail: which scout(s) are mid-promotion-animation right now, and
+   the color their avatar ring should start from (the rank they're leaving)
+   so avatarRingHtml()/animateAvatarRings() can transition it smoothly into
+   the new rank's color instead of snapping straight to it. Cleared by a
+   timeout set where the promotion is triggered (the rank <select> handler). */
+let rankingUpScoutIds = new Set();
+let rankUpFromColor = {};
 let editingTopicId = null;
 let editingCatItemId = null;
 let filters = { rankId: "all", query: "", sort: "name" };
@@ -1318,6 +1484,10 @@ function todayStr(){
 }
 let scheduleDate = todayStr();
 let activeScheduleId = null;
+// Ids of schedule blocks currently multi-selected (timeline or list view --
+// both views share this one set). Pruned in renderSchedule() to only ever
+// hold ids that still belong to the active schedule.
+let selectedBlockIds = new Set();
 let attendanceDate = todayStr();
 let attendanceHeatmapMonth = todayStr().slice(0,7);
 let schedSourceQuery = "";
@@ -1330,7 +1500,10 @@ let pendingCelebration = null;
 let scheduleViewMode = "timeline";
 try{ scheduleViewMode = localStorage.getItem("araratian_sched_view") || "timeline"; }catch(err){}
 
-const DAY_START = 8*60, DAY_END = 22*60, PX_PER_MIN = 1.4;
+// The schedule covers the full day through midnight (24:00) on both mobile and
+// desktop -- there's no separate "mobile" day range, just the one timeline/list
+// that both views render from, scrolled to fit whichever screen it's on.
+const DAY_START = 8*60, DAY_END = 24*60, PX_PER_MIN = 1.4;
 let drag = null; // {mode, blockId, startClientY, originStart, originDuration, elTop, elHeight}
 let pendingTouchTapStart = null;
 let autoScrolledScheduleKey = null;
@@ -1366,14 +1539,18 @@ function scoutInitials(s){
 /* A small conic-gradient "completion ring" standing in for an avatar photo
    (this app has none): the ring fill is the scout's % progress on their
    current rank, colored to match that rank. */
-function avatarRingHtml(initials, pct, color, extraClass){
+function avatarRingHtml(initials, pct, color, extraClass, fromColor){
   const p = Math.max(0,Math.min(100,pct||0));
+  const finalColor = color||"var(--navy)";
   /* --pct starts at 0 here on purpose: the ring animates up to its real value
      via animateAvatarRings(), which runs right after this markup lands in the
      DOM. Baking the final value straight into this inline style would give
      the browser nothing to transition from (a freshly-inserted node has no
-     "before" state), so it would just snap instead of filling in. */
-  return `<div class="avatar-ring ${extraClass||""}" data-pct="${p}" style="--pct:0; --ring-color:${esc(color||"var(--navy)")}" title="${p}%">
+     "before" state), so it would just snap instead of filling in. The same
+     trick applies to --ring-color during a rank-up: fromColor (the OLD
+     rank's color) is what gets baked in below, with the real color stashed
+     in data-final-color for animateAvatarRings() to apply a beat later. */
+  return `<div class="avatar-ring ${extraClass||""}" data-pct="${p}" data-final-color="${esc(finalColor)}" style="--pct:0; --ring-color:${esc(fromColor||finalColor)}" title="${p}%">
     <span class="avatar-initials">${esc(initials)}</span>
   </div>`;
 }
@@ -1382,6 +1559,7 @@ function animateAvatarRings(){
     requestAnimationFrame(()=>{
       document.querySelectorAll(".avatar-ring[data-pct]").forEach(el=>{
         el.style.setProperty("--pct", el.dataset.pct);
+        if(el.dataset.finalColor) el.style.setProperty("--ring-color", el.dataset.finalColor);
       });
     });
   });
@@ -1780,6 +1958,27 @@ function segBarHtml(scoutId, rankId){
   ];
   return '<div class="seg-bar">' + segs.map(([cls,n])=> n ? `<span class="${cls}" style="width:${(n/total*100)}%"></span>` : "").join("") + "</div>";
 }
+/* Same segmented-bar idea as rankStatusCounts()/segBarHtml() above, but
+   flipped: counts every SCOUT's status on one fixed topic, instead of every
+   topic's status for one fixed scout. That's what turns it into a per-topic
+   "how's the whole troop doing on this" strip rather than a per-scout
+   progress bar. */
+function topicStatusCounts(topicId){
+  const list = sortedScouts();
+  const c = {not_started:0, weak:0, in_progress:0, mastered:0};
+  list.forEach(s=> c[statusFor(s.id, topicId)]++);
+  return {counts:c, total:list.length};
+}
+function topicHeatStripHtml(topicId){
+  const {counts, total} = topicStatusCounts(topicId);
+  if(!total) return "";
+  const segs = [
+    ["seg-none", counts.not_started], ["seg-weak", counts.weak],
+    ["seg-prog", counts.in_progress], ["seg-done", counts.mastered],
+  ];
+  const pct = Math.round((counts.mastered/total)*100);
+  return `<div class="heat-strip" title="${esc(t('heatStripTitle').replace('{pct}', pct))}">${segs.map(([cls,n])=> n ? `<span class="${cls}" style="width:${(n/total*100)}%"></span>` : "").join("")}</div>`;
+}
 
 async function setStatus(scoutId, topicId, status){
   const key = progressKey(scoutId, topicId);
@@ -1918,6 +2117,24 @@ function playCelebrationChime(){
 }
 function triggerHapticBuzz(){
   try{ if(navigator.vibrate) navigator.vibrate([30,40,30,40,90]); }catch(e){}
+}
+/* The rank-up trail lives on the avatar ring itself (see the .ranking-up
+   CSS and avatarRingHtml()'s fromColor param) rather than as a one-off
+   overlay effect like the confetti celebration below -- it needs to survive
+   a full render() (the rank <select>'s own change re-renders the scout
+   detail panel) and show up in both places the ring appears (the roster
+   card and the detail panel), so it's driven by render-read state instead
+   of a DOM node built once and thrown away. */
+function triggerRankUpTrail(scoutId, oldRankId){
+  const oldRank = ranks[oldRankId];
+  rankUpFromColor[scoutId] = oldRank ? oldRank.color : null;
+  rankingUpScoutIds.add(scoutId);
+  render();
+  setTimeout(()=>{
+    rankingUpScoutIds.delete(scoutId);
+    delete rankUpFromColor[scoutId];
+    render();
+  }, 1200);
 }
 function triggerCelebration(scoutId, rankId){
   const s = scouts[scoutId], r = ranks[rankId];
@@ -2491,7 +2708,7 @@ let lastRenderedLang = null;
 let lastRenderedHeaderSig = null;
 function renderHeader(){
   const hdr = document.getElementById("hdrInner");
-  const sig = LANG + "|" + THEME_MODE + "|" + EDITOR_NAME;
+  const sig = LANG + "|" + THEME_MODE + "|" + DENSITY_MODE + "|" + EDITOR_NAME;
   if(sig === lastRenderedHeaderSig && hdr.childElementCount) return;
   lastRenderedHeaderSig = sig;
   const prevLang = lastRenderedLang;
@@ -2512,13 +2729,15 @@ function renderHeader(){
         <button data-action="setLang" data-lang="en" class="${LANG==="en"?"active":""}">EN</button>
       </div>
       <button type="button" class="theme-toggle" data-action="cycleTheme" title="${esc(t("themeMode_"+THEME_MODE))}">${THEME_MODE==="light"?"☀️":THEME_MODE==="dark"?"🌙":"🖥️"}</button>
+      <button type="button" class="theme-toggle density-toggle" data-action="cycleDensity" title="${esc(t("densityMode_"+DENSITY_MODE))}">${DENSITY_MODE==="compact"?"A−":DENSITY_MODE==="large"?"A+":"A"}</button>
+      <button type="button" class="theme-toggle kbd-shortcuts-btn" data-action="openShortcutsOverlay" title="${esc(t("keyboardShortcuts"))} (?)">⌨️</button>
     </div>`;
   const editorInput = document.getElementById("editorNameInput");
   editorInput.addEventListener("change", (e)=>{
     EDITOR_NAME = e.target.value;
     try{ localStorage.setItem("araratian_editor", EDITOR_NAME); }catch(err){}
   });
-  hdr.querySelectorAll("[data-action='setLang'], [data-action='cycleTheme']").forEach(el=> el.addEventListener("click", onAction));
+  hdr.querySelectorAll("[data-action='setLang'], [data-action='cycleTheme'], [data-action='cycleDensity'], [data-action='openShortcutsOverlay']").forEach(el=> el.addEventListener("click", onAction));
   const thumb = document.getElementById("langThumb");
   const activeBtn = hdr.querySelector(".lang-switch button.active");
   if(thumb && activeBtn){
@@ -2648,7 +2867,7 @@ function renderRoster(){
     <div class="scout-card" data-action="openScout" data-id="${s.id}" style="border-left-color:${esc(r?.color||'#ccc')}">
       <div class="row1">
         <div class="row1-id">
-          ${avatarRingHtml(scoutInitials(s), pct, r?r.color:null)}
+          ${avatarRingHtml(scoutInitials(s), pct, r?r.color:null, rankingUpScoutIds.has(s.id)?"ranking-up":"", rankUpFromColor[s.id])}
           <div style="min-width:0">
             <div class="scout-name">${esc(scoutDisplayName(s))}</div>
             <div class="scout-role">${s.roleCode ? esc(roleLabel(s.roleCode)) : esc(t('noRole'))}</div>
@@ -2709,7 +2928,6 @@ function renderDetailOverlay(isNewlyOpened){
           </div>
           <div class="topic-status-label">${esc(t(STATUS_META[st].labelKey))}</div>
           <div class="topic-detail ${detailOpen?"open":""}">
-           <div class="topic-detail-inner">
             <div>${esc(loc(tp,"summary"))}</div>
             <div>${esc(loc(tp,"knowledge"))}</div>
             ${attachmentChipsHtml(tp, "topic", false)}
@@ -2721,7 +2939,6 @@ function renderDetailOverlay(isNewlyOpened){
                 : `<button type="button" class="btn small ghost" data-action="triggerTopicPhoto" data-scout="${s.id}" data-topic="${tp.id}">📷 ${esc(t('attachPhoto'))}</button>`}
               <input type="file" accept="image/*" class="topic-photo-input" data-scout="${s.id}" data-topic="${tp.id}" hidden />
             </div>
-           </div>
           </div>
         </div>
       </div>`;
@@ -2736,11 +2953,9 @@ function renderDetailOverlay(isNewlyOpened){
         </div>
       </div>
       <div class="rank-section-body">
-       <div class="rank-section-body-inner">
         ${r.bookUrl ? `<a class="book-link" href="javascript:void(0)" data-action="openBook" data-url="${esc(r.bookUrl)}">📘 ${esc(t('openBook'))}</a>` : ""}
         <div class="rank-req">${reqLine}</div>
         ${rows}
-       </div>
       </div>
     </div>`;
   }).join("");
@@ -2750,7 +2965,7 @@ function renderDetailOverlay(isNewlyOpened){
   root.innerHTML = `
   <div class="detail-panel${isNewlyOpened ? " entering" : ""}">
     <div class="detail-head">
-      ${avatarRingHtml(scoutInitials(s), currentPct, currentRank?currentRank.color:null, "avatar-ring-lg")}
+      ${avatarRingHtml(scoutInitials(s), currentPct, currentRank?currentRank.color:null, "avatar-ring-lg"+(rankingUpScoutIds.has(s.id)?" ranking-up":""), rankUpFromColor[s.id])}
       <div style="flex:1; min-width:0">
         <div class="name-row">
           <span class="honorific-pill">${esc(honorificWord(s.honorific)||"—")}</span>
@@ -2841,12 +3056,10 @@ function renderCurriculum(){
         <span class="caret">›</span>
       </div>
       <div class="rank-section-body">
-       <div class="rank-section-body-inner">
         ${r.bookUrl ? `<a class="book-link" href="javascript:void(0)" data-action="openBook" data-url="${esc(r.bookUrl)}">📘 ${esc(t('openBook'))}</a>` : ""}
         <div class="req-grid">${reqFields}</div>
         <div class="curr-cards-grid">${rows}</div>
         <div style="margin-top:8px"><button class="btn small gold" data-action="addTopic" data-rank="${r.id}">${esc(t('addTopic'))}</button></div>
-       </div>
       </div>
     </div>`;
   }).join("");
@@ -2863,7 +3076,6 @@ function renderCurriculum(){
         <span class="caret">›</span>
       </div>
       <div class="rank-section-body">
-       <div class="rank-section-body-inner">
         <input type="text" data-catname="hy" data-cat="${c.id}" value="${esc(c.nameHy||"")}" placeholder="${esc(t('categoryName'))} (ՀԱՅ)" style="margin-bottom:6px; width:100%; border:none; background:var(--panel-2); border-radius:8px; padding:6px 9px; font-size:.82rem; color:var(--ink)" />
         <input type="text" data-catname="en" data-cat="${c.id}" value="${esc(c.nameEn||"")}" placeholder="${esc(t('categoryName'))} (EN)" style="margin-bottom:8px; width:100%; border:none; background:var(--panel-2); border-radius:8px; padding:6px 9px; font-size:.82rem; color:var(--ink)" />
         <div class="curr-cards-grid">${rows}</div>
@@ -2871,7 +3083,6 @@ function renderCurriculum(){
           <button class="btn small gold" data-action="addCatItem" data-cat="${c.id}">${esc(t('addItem'))}</button>
           <button class="btn small danger" data-action="deleteCategory" data-id="${c.id}">${esc(t('delete'))}</button>
         </div>
-       </div>
       </div>
     </div>`;
   }).join("");
@@ -2953,8 +3164,12 @@ function curriculumItemRow(item, kind){
     return `
     <div class="curr-card">
       <div class="ci-main" data-action="${kind==='topic'?'editTopic':'editCatItem'}" data-id="${item.id}">
-        <div class="ci-title">${esc(loc(item,titleField))||"—"}</div>
+        <div class="ci-title-row">
+          <div class="ci-title">${esc(loc(item,titleField))||"—"}</div>
+          ${kind==="topic" && item.teachingNotes ? `<span class="teaching-notes-badge" title="${esc(t('teachingNotesBadgeTitle'))}">📝</span>` : ""}
+        </div>
         <div class="ci-sub">${esc(loc(item,"summary")||loc(item,"desc")||"")} ${sub?(" · "+sub):""}</div>
+        ${kind==="topic" ? topicHeatStripHtml(item.id) : ""}
         <div class="ci-attachments">${attachmentChipsHtml(item, kind, false)}</div>
       </div>
       <div class="curr-item-actions">
@@ -2973,6 +3188,14 @@ function curriculumItemRow(item, kind){
         <div><label>${esc(t('summary'))} (EN)</label><textarea rows="2" data-field="summaryEn" data-topic="${item.id}">${esc(item.summaryEn||"")}</textarea></div>
         <div><label>${esc(t('knowledge'))} (ՀԱՅ)</label><textarea rows="2" data-field="knowledgeHy" data-topic="${item.id}">${esc(item.knowledgeHy||"")}</textarea></div>
         <div><label>${esc(t('knowledge'))} (EN)</label><textarea rows="2" data-field="knowledgeEn" data-topic="${item.id}">${esc(item.knowledgeEn||"")}</textarea></div>
+      </div>
+      <!-- One shared field, not split by language like the curriculum text above --
+           this is a leader's own working note about HOW to teach the topic, not
+           official bilingual content, so there's nothing to keep in sync across
+           languages. Every leader across the troop reads and edits the same note. -->
+      <div class="teaching-notes-block">
+        <label>${esc(t('teachingNotes'))}</label>
+        <textarea rows="3" data-field="teachingNotes" data-topic="${item.id}" placeholder="${esc(t('teachingNotesPlaceholder'))}">${esc(item.teachingNotes||"")}</textarea>
       </div>
       <div style="font-size:.7rem; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.03em; margin-top:10px">${esc(t('attachments'))}</div>
       ${attachmentChipsHtml(item, kind, true)}
@@ -3058,7 +3281,7 @@ function renderSchedule(){
         <span>${label} <span style="font-weight:400; opacity:.7">(${filtered.length})</span></span>
         <span class="caret">›</span>
       </h4>
-      <div class="sched-side-block-body"><div class="sched-side-block-body-inner">${chips}</div></div>
+      <div class="sched-side-block-body">${chips}</div>
     </div>`;
   }
   const sideRanks = rlist.map(r=>
@@ -3072,6 +3295,11 @@ function renderSchedule(){
   const searchBar = `<input type="text" id="schedSourceSearch" class="sched-search-input" placeholder="${esc(t('schedSearchPlaceholder'))}" value="${esc(schedSourceQuery)}" />`;
 
   const blocks = blocksForSchedule(activeScheduleId);
+  // Bulk selection only makes sense against blocks in the schedule currently
+  // on screen -- drop any id that no longer belongs (schedule switched, date
+  // changed, or the block itself was deleted) rather than let it linger.
+  const validBlockIds = new Set(blocks.map(b=>b.id));
+  for(const id of Array.from(selectedBlockIds)) if(!validBlockIds.has(id)) selectedBlockIds.delete(id);
   const hourRows = [];
   for(let m=DAY_START; m<=DAY_END; m+=60){
     const top = (m-DAY_START)*PX_PER_MIN;
@@ -3086,8 +3314,10 @@ function renderSchedule(){
     const bg = b.color||'#0C3953';
     const fg = contrastTextColor(bg);
     const grip = fg==="#fff" ? "rgba(255,255,255,.6)" : "rgba(0,0,0,.3)";
+    const isSelected = selectedBlockIds.has(b.id);
     return `
-    <div class="tl-block" data-block="${b.id}" style="top:${top}px; height:${h}px; background:${esc(bg)}; color:${fg}; --grip:${grip}">
+    <div class="tl-block ${isSelected?"selected":""}" data-block="${b.id}" style="top:${top}px; height:${h}px; background:${esc(bg)}; color:${fg}; --grip:${grip}">
+      <button type="button" class="tl-select-toggle" data-action="toggleBlockSelection" data-block="${b.id}" title="${esc(t('selectBlockTitle'))}">${isSelected?"✓":""}</button>
       <div class="tb-title">${esc(blockDisplayTitle(b))}</div>
       <div class="tb-time">${startLbl}–${endLbl}</div>
       <div class="tl-resize" data-resize="${b.id}"></div>
@@ -3102,8 +3332,10 @@ function renderSchedule(){
   const listRows = blocks.map((b, i)=>{
     const startLbl = minLabel(b.startMin), endLbl = minLabel(b.startMin+b.durationMin);
     const bg = b.color||'#0C3953';
+    const isSelected = selectedBlockIds.has(b.id);
     return `
-    <div class="sched-list-row" data-block="${b.id}">
+    <div class="sched-list-row ${isSelected?"selected":""}" data-block="${b.id}">
+      <input type="checkbox" class="sched-list-check" data-action="toggleBlockSelection" data-block="${b.id}" title="${esc(t('selectBlockTitle'))}" ${isSelected?"checked":""} />
       <span class="sched-list-swatch" style="background:${esc(bg)}"></span>
       <div class="sched-list-main" data-action="openBlockModal" data-id="${b.id}">
         <div class="sched-list-title">${esc(blockDisplayTitle(b))}</div>
@@ -3130,7 +3362,7 @@ function renderSchedule(){
       </div>
     </div>`;
 
-  return toolbar + templateBar + `
+  return toolbar + templateBar + bulkSelectionBarHtml() + `
   <div class="sched-layout">
     <div class="sched-side">
       <div class="sched-side-block" style="background:transparent; box-shadow:none; padding:0">
@@ -3142,6 +3374,23 @@ function renderSchedule(){
       ${sideCats ? `<div style="font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-dim); margin:8px 0 4px">${esc(t('fromCategories'))}</div>${sideCats}` : ""}
     </div>
     ${mainPaneHtml}
+  </div>`;
+}
+/* The 8-swatch quick-recolor strip is a curated spread across the 24-color
+   palette (every 3rd swatch) rather than all 24 -- enough variety for a bulk
+   action without turning the bar itself into a wall of color chips. */
+const BULK_RECOLOR_SWATCHES = [0,3,6,9,12,15,18,21].map(i=>CATEGORY_SWATCHES[i]);
+function bulkSelectionBarHtml(){
+  if(selectedBlockIds.size === 0) return "";
+  const swatchHtml = BULK_RECOLOR_SWATCHES.map(c=>
+    `<span class="bulk-select-swatch" style="background:${esc(c)}" data-action="bulkRecolorBlocks" data-color="${esc(c)}" title="${esc(t('recolorSelected'))}"></span>`
+  ).join("");
+  return `
+  <div class="bulk-select-bar">
+    <span class="bsb-count">${selectedBlockIds.size} ${esc(t('selectedCount'))}</span>
+    <div class="bulk-select-swatches">${swatchHtml}</div>
+    <button type="button" class="btn small danger" data-action="bulkDeleteBlocks">${esc(t('deleteSelected'))}</button>
+    <button type="button" class="btn small" data-action="clearBlockSelection">${esc(t('cancelSelection'))}</button>
   </div>`;
 }
 function minLabel(m){
@@ -3295,16 +3544,27 @@ function renderAttendance(){
 function patrolLeaderboardHtml(list){
   if(list.length < 2) return "";
   const ranked = list.map(p=> ({p, total: patrolTotal(p.id)})).sort((a,b)=> b.total-a.total);
-  const maxAbs = Math.max(1, ...ranked.map(r=> Math.abs(r.total)));
+  // Positive and negative totals are scaled against their own side's max, each
+  // capped at 46% of the track so the bar grows out from a center zero-line
+  // instead of end-to-end -- see the .lb-bar-track comment in the CSS for why.
+  const maxPos = Math.max(1, ...ranked.map(r=> Math.max(0, r.total)));
+  const maxNeg = Math.max(1, ...ranked.map(r=> Math.max(0, -r.total)));
   const medals = ["🥇","🥈","🥉"];
-  const rows = ranked.map((r,i)=>`
+  const rows = ranked.map((r,i)=>{
+    const isNeg = r.total < 0;
+    const pct = r.total===0 ? 0 : Math.max(4, Math.round((isNeg ? -r.total/maxNeg : r.total/maxPos) * 46));
+    const barStyle = isNeg
+      ? `width:${pct}%; right:50%; background:var(--st-weak)`
+      : `width:${pct}%; left:50%; background:${esc(r.p.color||'#888')}`;
+    return `
     <div class="leaderboard-row">
       <span class="lb-rank">${medals[i]||(i+1)}</span>
       <span class="color-dot" style="background:${esc(r.p.color||'#888')}"></span>
       <span class="lb-name">${esc(r.p.name)}</span>
-      <div class="lb-bar-track"><div class="lb-bar-fill" style="width:${Math.max(4, Math.round(Math.abs(r.total)/maxAbs*100))}%; background:${esc(r.p.color||'#888')}"></div></div>
-      <span class="lb-total ${r.total<0?'neg':''}">${r.total>0?'+':''}${r.total}</span>
-    </div>`).join("");
+      <div class="lb-bar-track"><span class="lb-bar-zero"></span><div class="lb-bar-fill ${isNeg?'neg':''}" style="${barStyle}"></div></div>
+      <span class="lb-total ${isNeg?'neg':''}">${r.total>0?'+':''}${r.total}</span>
+    </div>`;
+  }).join("");
   return `<div class="leaderboard"><h3>${esc(t('leaderboardTitle'))}</h3>${rows}</div>`;
 }
 function renderPatrols(){
@@ -3615,7 +3875,13 @@ function bindEvents(){
     const honSel = overlay.querySelector("#scoutHonorificSelect");
     if(honSel) honSel.addEventListener("change", (e)=> mergeDoc("scouts", e.target.dataset.id, {honorific: e.target.value}));
     const rankSelect = overlay.querySelector("#scoutRankSelect");
-    if(rankSelect) rankSelect.addEventListener("change", (e)=> mergeDoc("scouts", e.target.dataset.id, {rankId: e.target.value}));
+    if(rankSelect) rankSelect.addEventListener("change", (e)=>{
+      const scoutId = e.target.dataset.id, newRankId = e.target.value;
+      const scout = scouts[scoutId];
+      const oldRankId = scout ? scout.rankId : null;
+      mergeDoc("scouts", scoutId, {rankId: newRankId});
+      if(scout && oldRankId && oldRankId!==newRankId){ triggerRankUpTrail(scoutId, oldRankId); }
+    });
     const roleSelect = overlay.querySelector("#scoutRoleSelect");
     if(roleSelect) roleSelect.addEventListener("change", (e)=> mergeDoc("scouts", e.target.dataset.id, {roleCode: e.target.value}));
     const patrolSelect = overlay.querySelector("#scoutPatrolSelect");
@@ -3680,7 +3946,15 @@ function onAction(e){
     applyThemeMode();
     render();
   }
+  else if(action==="cycleDensity"){
+    const idx = DENSITY_ORDER.indexOf(DENSITY_MODE);
+    DENSITY_MODE = DENSITY_ORDER[(idx+1) % DENSITY_ORDER.length];
+    try{ localStorage.setItem("araratian_density", DENSITY_MODE); }catch(err){}
+    applyDensityMode();
+    render();
+  }
   else if(action==="setView"){ view = el.dataset.view; render(); }
+  else if(action==="openShortcutsOverlay"){ shortcutsOverlayOpen ? closeShortcutsOverlay() : openShortcutsOverlay(); }
   else if(action==="openScout"){ activeScoutId = el.dataset.id; render(); }
   else if(action==="closeScout"){ activeScoutId = null; render(); }
   else if(action==="deleteScout"){
@@ -3846,6 +4120,10 @@ function onAction(e){
     render();
   }
   else if(action==="moveBlockInList"){ moveBlockInList(el.dataset.block, parseInt(el.dataset.dir,10)); }
+  else if(action==="toggleBlockSelection"){ toggleBlockSelection(el.dataset.block); }
+  else if(action==="clearBlockSelection"){ clearBlockSelection(); }
+  else if(action==="bulkDeleteBlocks"){ bulkDeleteBlocks(); }
+  else if(action==="bulkRecolorBlocks"){ bulkRecolorBlocks(el.dataset.color); }
   else if(action==="deleteBlockFromList"){
     const b = scheduleBlocks[el.dataset.block]; if(!b) return;
     confirmAction(t("deleteBlockConfirm"), ()=>{
@@ -4095,6 +4373,30 @@ function moveBlockInList(blockId, dir){
   mergeDoc("scheduleBlocks", other.id, {startMin: aStart});
   render();
 }
+function toggleBlockSelection(blockId){
+  if(selectedBlockIds.has(blockId)) selectedBlockIds.delete(blockId);
+  else selectedBlockIds.add(blockId);
+  render();
+}
+function clearBlockSelection(){ selectedBlockIds.clear(); render(); }
+function bulkDeleteBlocks(){
+  const ids = Array.from(selectedBlockIds);
+  if(!ids.length) return;
+  confirmAction(t("bulkDeleteConfirm").replace("{count}", ids.length), ()=>{
+    ids.forEach(id=>{
+      const b = scheduleBlocks[id];
+      if(b) logActivity(t("activityBlockDeleted").replace("{title}", blockDisplayTitle(b)));
+      deleteDoc("scheduleBlocks", id);
+    });
+    selectedBlockIds.clear();
+    render();
+  });
+}
+function bulkRecolorBlocks(color){
+  if(!selectedBlockIds.size) return;
+  selectedBlockIds.forEach(id=> mergeDoc("scheduleBlocks", id, {color}));
+  render();
+}
 function openBlockModal(existingId){
   const root = document.getElementById("modalRoot");
   const b = existingId ? scheduleBlocks[existingId] : null;
@@ -4165,13 +4467,25 @@ function bindTimelineDrag(){
     blockEl.addEventListener("click", (e)=>{
       if(drag && drag.moved) return; // suppress click after a real drag
       if(e.target.classList.contains("tl-resize")) return;
+      if(e.target.closest(".tl-select-toggle")) return; // the toggle button handles its own click
+      if(e.shiftKey || e.ctrlKey || e.metaKey){ toggleBlockSelection(blockId); return; }
       openBlockModal(blockId);
     });
     blockEl.addEventListener("pointerdown", (e)=>{
       if(e.target.classList.contains("tl-resize")) return;
+      if(e.target.closest(".tl-select-toggle")) return;
       e.preventDefault();
       const b = scheduleBlocks[blockId]; if(!b) return;
-      drag = { mode:"move", blockId, startY: e.clientY, originStart: b.startMin, moved:false };
+      // Dragging a block that's part of a larger selection moves the whole
+      // group together, keeping every member's position relative to the one
+      // being dragged -- see the group-clamping comment in
+      // onTimelinePointerMove for how their shared bounds are enforced.
+      const isGroupDrag = selectedBlockIds.has(blockId) && selectedBlockIds.size > 1;
+      const group = isGroupDrag ? Array.from(selectedBlockIds).map(id=>{
+        const gb = scheduleBlocks[id];
+        return gb ? {id, originStart: gb.startMin, durationMin: gb.durationMin} : null;
+      }).filter(Boolean) : null;
+      drag = { mode:"move", blockId, startY: e.clientY, originStart: b.startMin, moved:false, group };
       blockEl.setPointerCapture(e.pointerId);
       blockEl.classList.add("dragging");
     });
@@ -4278,7 +4592,25 @@ function onTimelinePointerMove(e){
   const blockEl = document.querySelector('.tl-block[data-block="'+drag.blockId+'"]');
   const b = scheduleBlocks[drag.blockId];
   if(!blockEl || !b) return;
-  if(drag.mode==="move"){
+  if(drag.mode==="move" && drag.group){
+    // Clamp the group's SHARED delta so every member stays in-bounds together --
+    // without this, the member closest to a boundary would stop early while the
+    // rest kept moving, breaking the selection's relative positions apart.
+    let minDelta = -Infinity, maxDelta = Infinity;
+    drag.group.forEach(g=>{
+      minDelta = Math.max(minDelta, DAY_START - g.originStart);
+      maxDelta = Math.min(maxDelta, DAY_END - g.durationMin - g.originStart);
+    });
+    const effectiveDelta = Math.max(minDelta, Math.min(maxDelta, deltaMin));
+    drag.pendingGroup = {};
+    drag.group.forEach(g=>{
+      const gStart = g.originStart + effectiveDelta;
+      const gEl = document.querySelector('.tl-block[data-block="'+g.id+'"]');
+      if(gEl) gEl.style.top = ((gStart-DAY_START)*PX_PER_MIN) + "px";
+      drag.pendingGroup[g.id] = gStart;
+    });
+    drag.pendingStart = drag.pendingGroup[drag.blockId];
+  } else if(drag.mode==="move"){
     let newStart = drag.originStart + deltaMin;
     newStart = Math.max(DAY_START, Math.min(DAY_END-b.durationMin, newStart));
     blockEl.style.top = ((newStart-DAY_START)*PX_PER_MIN) + "px";
@@ -4306,7 +4638,10 @@ function onTimelinePointerUp(e){
   const blockEl = document.querySelector('.tl-block[data-block="'+drag.blockId+'"]');
   if(blockEl) blockEl.classList.remove("dragging");
   if(drag.moved){
-    if(drag.mode==="move" && drag.pendingStart!=null){ mergeDoc("scheduleBlocks", drag.blockId, {startMin: drag.pendingStart}); }
+    if(drag.mode==="move" && drag.pendingGroup){
+      Object.keys(drag.pendingGroup).forEach(id=> mergeDoc("scheduleBlocks", id, {startMin: drag.pendingGroup[id]}));
+    }
+    else if(drag.mode==="move" && drag.pendingStart!=null){ mergeDoc("scheduleBlocks", drag.blockId, {startMin: drag.pendingStart}); }
     else if(drag.mode==="resize" && drag.pendingDuration!=null){ mergeDoc("scheduleBlocks", drag.blockId, {durationMin: drag.pendingDuration}); }
   }
   const wasMoved = drag.moved;
@@ -4586,6 +4921,102 @@ function initHeaderScrollShadow(){
 }
 initHeaderScrollShadow();
 initWordLookup();
+
+/* =========================== KEYBOARD SHORTCUTS =========================== */
+/* Desktop-only in practice (nothing here fires from a touch tap): number keys
+   jump straight to a tab, [ / ] step to the previous/next one, Delete removes
+   whatever schedule blocks are multi-selected, and ? opens a cheat-sheet of
+   all of this so none of it depends on being memorized or discovered by
+   accident. Escape is handled first and unconditionally so it always has a
+   way to back out, even while a text field has focus. */
+const VIEW_ORDER = ["roster","curriculum","schedule","attendance","patrols","dashboard"];
+let shortcutsOverlayOpen = false;
+function isTypingTarget(el){
+  if(!el) return false;
+  const tag = el.tagName;
+  return tag==="INPUT" || tag==="TEXTAREA" || tag==="SELECT" || el.isContentEditable;
+}
+function modalIsOpen(){
+  // #modalRoot permanently carries the "modal-backdrop" class as part of its
+  // own hidden/visible toggle, so it has to be excluded explicitly here --
+  // otherwise it would always match and this would report a modal open even
+  // when nothing is. confirmAction()'s ad-hoc dialogs use the same class name
+  // on a *different*, freshly-created element, which is what ":not(#modalRoot)"
+  // is actually meant to catch.
+  const root = document.getElementById("modalRoot");
+  const hasMainModal = !!(root && !root.classList.contains("hidden") && root.innerHTML.trim());
+  const hasConfirmDialog = !!document.querySelector(".modal-backdrop:not(#modalRoot)");
+  return hasMainModal || hasConfirmDialog;
+}
+function initKeyboardShortcuts(){
+  window.addEventListener("keydown", (e)=>{
+    if(e.key === "Escape"){
+      if(shortcutsOverlayOpen){ closeShortcutsOverlay(); return; }
+      const confirmBackdrop = document.querySelector(".modal-backdrop:not(#modalRoot)");
+      if(confirmBackdrop){ confirmBackdrop.remove(); return; }
+      if(modalIsOpen()){ closeModal(); return; }
+      if(selectedBlockIds.size){ clearBlockSelection(); return; }
+      return;
+    }
+    if(e.key === "?"){
+      if(isTypingTarget(e.target)) return; // let "?" still be typed into a text field
+      e.preventDefault();
+      shortcutsOverlayOpen ? closeShortcutsOverlay() : openShortcutsOverlay();
+      return;
+    }
+    if(isTypingTarget(e.target)) return;
+    if(shortcutsOverlayOpen || modalIsOpen()) return;
+    if(e.key >= "1" && e.key <= "6" && !e.ctrlKey && !e.metaKey && !e.altKey){
+      const target = VIEW_ORDER[Number(e.key)-1];
+      if(target){ e.preventDefault(); view = target; render(); }
+      return;
+    }
+    if((e.key === "[" || e.key === "]") && !e.ctrlKey && !e.metaKey && !e.altKey){
+      e.preventDefault();
+      const curIdx = Math.max(0, VIEW_ORDER.indexOf(view));
+      const nextIdx = (curIdx + (e.key==="]"?1:-1) + VIEW_ORDER.length) % VIEW_ORDER.length;
+      view = VIEW_ORDER[nextIdx]; render();
+      return;
+    }
+    if((e.key === "Delete" || e.key === "Backspace") && view==="schedule" && selectedBlockIds.size){
+      e.preventDefault();
+      bulkDeleteBlocks();
+      return;
+    }
+  });
+}
+function openShortcutsOverlay(){
+  if(shortcutsOverlayOpen) return;
+  shortcutsOverlayOpen = true;
+  const root = document.createElement("div");
+  root.className = "kbd-overlay";
+  root.id = "kbdOverlay";
+  const rows = [
+    ["1", "6", "kbdRowTabs"],
+    ["[", "]", "kbdRowPrevNextTab"],
+    ["Delete", null, "kbdRowDeleteSelected"],
+    ["Esc", null, "kbdRowCloseEscape"],
+    ["?", null, "kbdRowShowThis"],
+  ];
+  root.innerHTML = `
+  <div class="kbd-panel">
+    <h3>${esc(t("keyboardShortcuts"))}</h3>
+    ${rows.map(([k1,k2,labelKey])=>`
+    <div class="kbd-row">
+      <span>${esc(t(labelKey))}</span>
+      <div class="kbd-keys"><span class="kbd-key">${esc(k1)}</span>${k2?`<span class="kbd-key">${esc(k2)}</span>`:""}</div>
+    </div>`).join("")}
+    <div class="kbd-close-hint">${esc(t("kbdCloseHint"))}</div>
+  </div>`;
+  document.body.appendChild(root);
+  root.addEventListener("click", (e)=>{ if(e.target===root) closeShortcutsOverlay(); });
+}
+function closeShortcutsOverlay(){
+  shortcutsOverlayOpen = false;
+  const root = document.getElementById("kbdOverlay");
+  if(root) root.remove();
+}
+initKeyboardShortcuts();
 
      function initScrollProgress(){
   const fill = document.getElementById("scrollProgressFill");
