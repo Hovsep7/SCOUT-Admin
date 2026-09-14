@@ -703,15 +703,21 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
 .leaderboard-row:first-child{border-top:none}
 .lb-rank{flex:none; width:26px; text-align:center; font-size:.95rem; font-weight:800; color:var(--ink-dim)}
 .lb-name{flex:none; width:130px; font-size:.86rem; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-/* A diverging bar centered on zero: positive totals grow rightward from the
-   center in the team's own color, negative totals grow leftward from the
-   center in a flat "in the red" tone. Scaling each side off Math.abs() alone
-   used to make a -10 draw a LONGER bar than a +5 -- worse than every
-   positive team, but visually reading as more impressive than all of them.
-   Growing the opposite direction (and in a different, non-competing color)
-   fixes that without needing to hide negative totals altogether. */
+/* An ordinary left-anchored bar chart by default -- the zero-point sits at
+   the track's left edge exactly like a normal bar, no centering, no wasted
+   space. It's only when at least one team has actually gone negative that
+   the zero-point (see .lb-bar-zero, positioned inline per-render in
+   patrolLeaderboardHtml) shifts right by a small reserved margin just wide
+   enough for negative bars to grow into on the left, in a flat "in the red"
+   tone; every positive bar still fills the rest of the track exactly as it
+   would have anyway. Scaling each side off Math.abs() alone used to make a
+   -10 draw a LONGER bar than a +5 -- worse than every positive team, but
+   visually reading as more impressive than all of them -- which is what
+   growing the negative side the other way (in a non-competing color) fixes,
+   without needing to hide negative totals altogether or center everything
+   when nobody is actually negative. */
 .lb-bar-track{flex:1; min-width:40px; height:9px; border-radius:999px; background:var(--panel-3); overflow:hidden; position:relative}
-.lb-bar-zero{position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--ink-dim); opacity:.3}
+.lb-bar-zero{position:absolute; top:0; bottom:0; width:1px; background:var(--ink-dim); opacity:.3}
 .lb-bar-fill{position:absolute; top:0; height:100%; border-radius:999px; transition:width .5s cubic-bezier(.16,.84,.44,1), left .5s cubic-bezier(.16,.84,.44,1)}
 .lb-bar-fill.neg{background:var(--st-weak) !important}
 .lb-total{flex:none; width:48px; text-align:right; font-weight:800; color:var(--st-done)}
@@ -3544,24 +3550,37 @@ function renderAttendance(){
 function patrolLeaderboardHtml(list){
   if(list.length < 2) return "";
   const ranked = list.map(p=> ({p, total: patrolTotal(p.id)})).sort((a,b)=> b.total-a.total);
-  // Positive and negative totals are scaled against their own side's max, each
-  // capped at 46% of the track so the bar grows out from a center zero-line
-  // instead of end-to-end -- see the .lb-bar-track comment in the CSS for why.
+  // Ordinary left-anchored bar by default -- zeroPct is 0, so positive bars
+  // just fill the track from the left edge like a normal bar chart, nothing
+  // centered or reserved. Only once a team has actually gone negative does
+  // the zero-point move off the left edge, by just enough margin (zeroPct)
+  // for negative bars to have room to grow into on the left; every positive
+  // bar still fills the *rest* of the track exactly as before, it just now
+  // starts a bit further right instead of at 0. See the .lb-bar-track CSS
+  // comment for the fuller "why" (this replaces a scheme that centered
+  // everything at 50% even when nobody was negative, which read as odd).
+  const hasNegative = ranked.some(r=> r.total < 0);
+  const zeroPct = hasNegative ? 18 : 0;
   const maxPos = Math.max(1, ...ranked.map(r=> Math.max(0, r.total)));
   const maxNeg = Math.max(1, ...ranked.map(r=> Math.max(0, -r.total)));
   const medals = ["🥇","🥈","🥉"];
   const rows = ranked.map((r,i)=>{
     const isNeg = r.total < 0;
-    const pct = r.total===0 ? 0 : Math.max(4, Math.round((isNeg ? -r.total/maxNeg : r.total/maxPos) * 46));
-    const barStyle = isNeg
-      ? `width:${pct}%; right:50%; background:var(--st-weak)`
-      : `width:${pct}%; left:50%; background:${esc(r.p.color||'#888')}`;
+    let barStyle;
+    if(isNeg){
+      const pct = Math.max(4, Math.round((-r.total/maxNeg) * zeroPct));
+      barStyle = `width:${pct}%; left:${Math.max(0, zeroPct-pct)}%; background:var(--st-weak)`;
+    } else {
+      const availWidth = 100 - zeroPct;
+      const pct = r.total===0 ? 0 : Math.max(4, Math.round((r.total/maxPos) * availWidth));
+      barStyle = `width:${pct}%; left:${zeroPct}%; background:${esc(r.p.color||'#888')}`;
+    }
     return `
     <div class="leaderboard-row">
       <span class="lb-rank">${medals[i]||(i+1)}</span>
       <span class="color-dot" style="background:${esc(r.p.color||'#888')}"></span>
       <span class="lb-name">${esc(r.p.name)}</span>
-      <div class="lb-bar-track"><span class="lb-bar-zero"></span><div class="lb-bar-fill ${isNeg?'neg':''}" style="${barStyle}"></div></div>
+      <div class="lb-bar-track">${hasNegative ? `<span class="lb-bar-zero" style="left:${zeroPct}%"></span>` : ""}<div class="lb-bar-fill ${isNeg?'neg':''}" style="${barStyle}"></div></div>
       <span class="lb-total ${isNeg?'neg':''}">${r.total>0?'+':''}${r.total}</span>
     </div>`;
   }).join("");
