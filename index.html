@@ -470,7 +470,9 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
   width:100%; border:none; background:var(--panel); color:var(--ink); border-radius:0; padding:9px 12px;
   font-size:.85rem; font-family:inherit; resize:vertical; display:block;
 }
-/* ---- rich-text toolbar + live preview, shared by session notes and leader notes ----
+.session-notes-expanded{min-height:46vh}
+/* ---- rich-text toolbar + live preview, shared by session notes, leader notes
+   and block notes ----
    Stacking order top-to-bottom: toolbar (rounded top) / textarea (flat) / live
    preview (rounded bottom) -- one visually continuous control. */
 .richtext-wrap{margin-bottom:14px; box-shadow:var(--shadow); border-radius:10px; overflow:hidden}
@@ -480,13 +482,23 @@ html{ scrollbar-width:thin; scrollbar-color:var(--gold) transparent; }
   cursor:pointer; font-size:.78rem; display:flex; align-items:center; justify-content:center;
 }
 .richtext-toolbar .rt-btn:hover{background:var(--gold); color:var(--gold-ink)}
+.richtext-toolbar .rt-expand{margin-left:auto}
 .richtext-preview{
   background:var(--panel-2); padding:9px 12px; font-size:.83rem; color:var(--ink);
   line-height:1.5; min-height:1.4em;
 }
-.richtext-preview ul{margin:4px 0; padding-left:20px}
+.richtext-preview h4{font-size:.95rem; margin:4px 0 2px}
+.richtext-preview ul, .richtext-preview ol{margin:4px 0; padding-left:20px}
 .richtext-preview div{margin:1px 0}
 .richtext-preview-empty{color:var(--ink-dim); font-style:italic}
+.modal.modal-wide{max-width:760px}
+/* ---- per-block notes preview shown in the schedule List view ---- */
+.sched-list-notes{
+  font-size:.76rem; color:var(--ink-dim); margin-top:2px; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; display:flex; align-items:center; gap:4px;
+}
+.sched-list-notes .sln-icon{flex:none; font-size:.72rem; opacity:.8}
+.sched-list-notes .sln-text{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .sched-pill{
   border:none; padding:7px 14px; border-radius:999px; font-size:.82rem; font-weight:600; cursor:pointer;
   background:var(--panel); color:var(--ink-dim); box-shadow:var(--shadow);
@@ -1130,8 +1142,14 @@ const STR = {
     activityNotesUpdated: "{scout}ի անձնական նշումները թարմացուեցան",
     fmtBold: "Թաւատառ",
     fmtItalic: "Շեղատառ",
+    fmtUnderline: "Ներքոգծել",
+    fmtHeading: "Վերնագիր",
     fmtBullet: "Ցանկ",
+    fmtNumbered: "Թուարկուած ցանկ",
+    fmtExpand: "Մեծցնել",
     richTextEmpty: "Դատարկ է…",
+    expandedNotesTitle: "Նշումներ",
+    blockNotesPreviewLabel: "📝 Նշում",
     attachPhoto: "Աւելցնել Նկար",
     removePhoto: "Հեռացնել Նկարը",
     photoTooLarge: "Նկարը շատ մեծ է։ Փորձեցէ՛ք աւելի պզտիկ նկար մը։",
@@ -1352,8 +1370,14 @@ const STR = {
     activityNotesUpdated: "{scout}'s private notes were updated",
     fmtBold: "Bold",
     fmtItalic: "Italic",
+    fmtUnderline: "Underline",
+    fmtHeading: "Heading",
     fmtBullet: "Bullet list",
+    fmtNumbered: "Numbered list",
+    fmtExpand: "Expand",
     richTextEmpty: "Nothing here yet…",
+    expandedNotesTitle: "Notes",
+    blockNotesPreviewLabel: "📝 Note",
     attachPhoto: "Attach Photo",
     removePhoto: "Remove Photo",
     photoTooLarge: "That photo is too large. Try a smaller image.",
@@ -1660,31 +1684,66 @@ function initWordLookup(){
 function formatInline(s){
   let h = esc(s);
   h = h.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/__(.+?)__/g, "<u>$1</u>");
   h = h.replace(/\*(.+?)\*/g, "<em>$1</em>");
   return h;
 }
 function renderRichText(raw){
   if(!raw) return "";
   const lines = String(raw).split("\n");
-  let html = "", inList = false;
+  let html = "", listType = null; // null | "ul" | "ol"
+  const closeList = ()=>{ if(listType){ html += listType==="ul" ? "</ul>" : "</ol>"; listType = null; } };
   lines.forEach(line=>{
+    const headingMatch = /^\s*##\s+(.*)$/.exec(line);
+    const numberedMatch = /^\s*\d+[.)]\s+(.*)$/.exec(line);
     const bulletMatch = /^\s*-\s+(.*)$/.exec(line);
-    if(bulletMatch){
-      if(!inList){ html += "<ul>"; inList = true; }
+    if(headingMatch){
+      closeList();
+      html += "<h4>" + formatInline(headingMatch[1]) + "</h4>";
+    } else if(numberedMatch){
+      if(listType!=="ol"){ closeList(); html += "<ol>"; listType = "ol"; }
+      html += "<li>" + formatInline(numberedMatch[1]) + "</li>";
+    } else if(bulletMatch){
+      if(listType!=="ul"){ closeList(); html += "<ul>"; listType = "ul"; }
       html += "<li>" + formatInline(bulletMatch[1]) + "</li>";
     } else {
-      if(inList){ html += "</ul>"; inList = false; }
+      closeList();
       html += line.trim()==="" ? "<br>" : ("<div>" + formatInline(line) + "</div>");
     }
   });
-  if(inList) html += "</ul>";
+  closeList();
   return html;
 }
-function richTextToolbarHtml(targetId){
+/* A plain, single-line summary of rich-text content -- strips the
+   markdown-lite syntax rather than rendering it, for tight spaces like the
+   schedule List view where a full HTML preview would wrap awkwardly. */
+function stripRichTextToPlain(raw){
+  if(!raw) return "";
+  return String(raw)
+    .replace(/^\s*##\s+/gm, "")
+    .replace(/^\s*-\s+/gm, "• ")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/\s*\n+\s*/g, "  ")
+    .trim();
+}
+function truncateText(s, max){
+  if(!s || s.length<=max) return s;
+  return s.slice(0, Math.max(0,max-1)).trim() + "…";
+}
+function richTextToolbarHtml(targetId, opts){
+  opts = opts || {};
+  const expandBtn = opts.expand ? `<button type="button" class="rt-btn rt-expand" data-expand="${targetId}" title="${esc(t('fmtExpand'))}">⤢</button>` : "";
   return `<div class="richtext-toolbar" data-target="${targetId}">
     <button type="button" class="rt-btn" data-fmt="bold" title="${esc(t('fmtBold'))}"><b>B</b></button>
     <button type="button" class="rt-btn" data-fmt="italic" title="${esc(t('fmtItalic'))}"><i>I</i></button>
+    <button type="button" class="rt-btn" data-fmt="underline" title="${esc(t('fmtUnderline'))}"><u>U</u></button>
+    <button type="button" class="rt-btn" data-fmt="heading" title="${esc(t('fmtHeading'))}">H</button>
     <button type="button" class="rt-btn" data-fmt="bullet" title="${esc(t('fmtBullet'))}">≡</button>
+    <button type="button" class="rt-btn" data-fmt="numbered" title="${esc(t('fmtNumbered'))}">1.</button>
+    ${expandBtn}
   </div>`;
 }
 function applyTextFormatting(textarea, kind){
@@ -1694,7 +1753,10 @@ function applyTextFormatting(textarea, kind){
   let insert;
   if(kind==="bold") insert = "**" + (selected || "text") + "**";
   else if(kind==="italic") insert = "*" + (selected || "text") + "*";
+  else if(kind==="underline") insert = "__" + (selected || "text") + "__";
+  else if(kind==="heading") insert = (selected || "Heading").split("\n").map(l=> "## " + l.replace(/^\s*##\s*/,"")).join("\n");
   else if(kind==="bullet") insert = (selected || "item").split("\n").map(l=> l.startsWith("- ") ? l : "- "+l).join("\n");
+  else if(kind==="numbered") insert = (selected || "item").split("\n").map((l,i)=> /^\s*\d+[.)]\s+/.test(l) ? l : (i+1)+". "+l).join("\n");
   else return;
   textarea.value = val.slice(0, start) + insert + val.slice(end);
   textarea.focus();
@@ -1707,8 +1769,24 @@ function wireRichTextToolbars(root){
   root.querySelectorAll(".richtext-toolbar").forEach(bar=>{
     const ta = document.getElementById(bar.dataset.target);
     if(!ta) return;
+    // Toolbar buttons sit right next to the textarea they act on, so a click
+    // normally steals focus away from it first (mousedown moves focus,
+    // firing the textarea's blur/change -- which saves the note and
+    // re-renders the whole screen -- *before* the click itself is handled).
+    // Two problems follow: applyTextFormatting loses the text selection it
+    // needs, and since that re-render replaces the button node that was
+    // actually pressed, browsers drop the click entirely, so nothing
+    // happens at all. Preventing the default mousedown behavior keeps focus
+    // (and the selection) on the textarea throughout, so the click still
+    // fires on a stable button and the formatting is applied where expected.
     bar.querySelectorAll(".rt-btn").forEach(btn=>{
+      btn.addEventListener("mousedown", (e)=> e.preventDefault());
+    });
+    bar.querySelectorAll(".rt-btn[data-fmt]").forEach(btn=>{
       btn.addEventListener("click", (e)=>{ e.preventDefault(); applyTextFormatting(ta, btn.dataset.fmt); });
+    });
+    bar.querySelectorAll(".rt-expand").forEach(btn=>{
+      btn.addEventListener("click", (e)=>{ e.preventDefault(); openExpandedNotesEditor(btn.dataset.expand); });
     });
     const preview = document.getElementById(bar.dataset.target + "Preview");
     if(preview){
@@ -1716,6 +1794,41 @@ function wireRichTextToolbars(root){
       ta.addEventListener("input", update);
       update();
     }
+  });
+}
+/* A full-screen-ish modal editor for any richtext-backed textarea -- gives
+   the session/leader/block notes a much roomier "write more" surface on
+   demand, without changing where or how the value is actually saved: it
+   copies the source textarea's value in, and on Save writes it straight
+   back and fires input/change so whatever listener already persists that
+   textarea (mergeDoc, etc.) runs exactly as if the person had typed there. */
+function openExpandedNotesEditor(sourceId){
+  const srcTa = document.getElementById(sourceId);
+  if(!srcTa) return;
+  const root = document.getElementById("modalRoot");
+  root.classList.remove("hidden");
+  root.innerHTML = `
+  <div class="modal modal-wide">
+    <h3>${esc(t("expandedNotesTitle"))}</h3>
+    <div class="richtext-wrap">
+      ${richTextToolbarHtml("expandedNotesInput")}
+      <textarea id="expandedNotesInput" class="session-notes session-notes-expanded">${esc(srcTa.value)}</textarea>
+      <div class="richtext-preview" id="expandedNotesInputPreview"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" data-action="closeModal">${esc(t("cancel"))}</button>
+      <button class="btn primary" data-action="saveExpandedNotes">${esc(t("save"))}</button>
+    </div>
+  </div>`;
+  wireRichTextToolbars(root);
+  root.querySelector("[data-action='closeModal']").addEventListener("click", closeModal);
+  root.addEventListener("click", (e)=>{ if(e.target===root) closeModal(); });
+  root.querySelector("[data-action='saveExpandedNotes']").addEventListener("click", ()=>{
+    const newVal = document.getElementById("expandedNotesInput").value;
+    srcTa.value = newVal;
+    srcTa.dispatchEvent(new Event("input", {bubbles:true}));
+    srcTa.dispatchEvent(new Event("change", {bubbles:true}));
+    closeModal();
   });
 }
 
@@ -2441,10 +2554,12 @@ function printSessionPlan(scheduleId){
   const blocks = blocksForSchedule(scheduleId);
   const rows = blocks.map(b=>{
     const startLbl = minLabel(b.startMin), endLbl = minLabel(b.startMin+b.durationMin);
-    return `<tr>
+    const hasNotes = !!b.notes;
+    const blockNotesRow = hasNotes ? `<tr class="sp-notes-row"><td></td><td><div class="sp-block-notes">${renderRichText(b.notes)}</div></td></tr>` : "";
+    return `<tr${hasNotes ? ' class="sp-block-row"' : ""}>
       <td class="sp-time">${startLbl}–${endLbl}</td>
       <td class="sp-title">${esc(blockDisplayTitle(b))}</td>
-    </tr>`;
+    </tr>${blockNotesRow}`;
   }).join("") || `<tr><td colspan="2" style="text-align:center; color:#999">${esc(t('noBlocks'))}</td></tr>`;
   const notesHtml = sched.notes ? `<div class="sp-notes">${renderRichText(sched.notes)}</div>` : "";
   const bodyHtml = `
@@ -2495,7 +2610,13 @@ body{font-family:"Noto Sans Armenian","Noto Sans",-apple-system,BlinkMacSystemFo
 .sp-time{color:#888; font-size:.78rem; white-space:nowrap; width:110px; font-weight:600}
 .sp-title{font-weight:600}
 .sp-notes{font-size:.87rem; line-height:1.5}
-.sp-notes ul{margin:4px 0; padding-left:22px}
+.sp-notes h4{font-size:.92rem; margin:4px 0 2px}
+.sp-notes ul, .sp-notes ol{margin:4px 0; padding-left:22px}
+.sp-block-notes{font-size:.8rem; line-height:1.45; color:#333; padding:0 4px 8px}
+.sp-block-notes h4{font-size:.85rem; margin:2px 0}
+.sp-block-notes ul, .sp-block-notes ol{margin:2px 0; padding-left:20px}
+.sp-block-row td{border-bottom:none; padding-bottom:0}
+.sp-notes-row td{border-bottom:1px solid #eee; padding-top:0}
 .pr-footer{margin-top:26px; text-align:center; color:#999; font-size:.68rem; border-top:1px solid #eee; padding-top:10px}
 @media print{
   body{background:#fff}
@@ -3267,8 +3388,8 @@ function renderSchedule(){
     ${sortedScheduleTemplates().map(tpl=>`<span class="template-chip">${esc(tpl.name)}<button class="tc-x" data-action="deleteTemplate" data-id="${tpl.id}" title="${esc(t('delete'))}">✕</button></span>`).join("")}
   </div>
   <div class="richtext-wrap">
-    ${richTextToolbarHtml("sessionNotesInput")}
-    <textarea id="sessionNotesInput" class="session-notes" placeholder="${esc(t('sessionNotesPlaceholder'))}" rows="2">${esc(activeSched?(activeSched.notes||""):"")}</textarea>
+    ${richTextToolbarHtml("sessionNotesInput", {expand:true})}
+    <textarea id="sessionNotesInput" class="session-notes" placeholder="${esc(t('sessionNotesPlaceholder'))}" rows="4">${esc(activeSched?(activeSched.notes||""):"")}</textarea>
     <div class="richtext-preview" id="sessionNotesInputPreview"></div>
   </div>`;
 
@@ -3346,6 +3467,7 @@ function renderSchedule(){
       <div class="sched-list-main" data-action="openBlockModal" data-id="${b.id}">
         <div class="sched-list-title">${esc(blockDisplayTitle(b))}</div>
         <div class="sched-list-time">${startLbl}–${endLbl}</div>
+        ${b.notes ? `<div class="sched-list-notes" title="${esc(stripRichTextToPlain(b.notes))}"><span class="sln-icon">📝</span><span class="sln-text">${esc(truncateText(stripRichTextToPlain(b.notes), 90))}</span></div>` : ""}
       </div>
       <div class="sched-list-controls">
         <button type="button" class="sched-list-arrow" data-action="moveBlockInList" data-block="${b.id}" data-dir="-1" title="${esc(t('moveBlockUp'))}" ${i===0?"disabled":""}>▲</button>
@@ -4435,7 +4557,14 @@ function openBlockModal(existingId){
     <div class="field"><label>${esc(t("color"))}</label>
       ${colorPickerHtml("blk", b?b.color:CATEGORY_SWATCHES[0])}
     </div>
-    <div class="field"><label>${esc(t("notes"))}</label><textarea id="blkNotes" rows="2">${esc(b?b.notes||"":"")}</textarea></div>
+    <div class="field">
+      <label>${esc(t("notes"))}</label>
+      <div class="richtext-wrap">
+        ${richTextToolbarHtml("blkNotes")}
+        <textarea id="blkNotes" class="session-notes" rows="4">${esc(b?b.notes||"":"")}</textarea>
+        <div class="richtext-preview" id="blkNotesPreview"></div>
+      </div>
+    </div>
     <div class="modal-actions">
       ${b?`<button class="btn danger" data-action="modalDeleteBlock">${esc(t("delete"))}</button>`:""}
       <button class="btn" data-action="closeModal">${esc(t("cancel"))}</button>
@@ -4443,6 +4572,7 @@ function openBlockModal(existingId){
     </div>
   </div>`;
   const blkColorPicker = wireColorPicker(root, "blk", b?b.color:CATEGORY_SWATCHES[0], ()=>{});
+  wireRichTextToolbars(root);
   root.querySelector("[data-action='closeModal']").addEventListener("click", closeModal);
   root.addEventListener("click", (e)=>{ if(e.target===root) closeModal(); });
   if(b){
